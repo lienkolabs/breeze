@@ -2,60 +2,51 @@ package state
 
 import (
 	"github.com/lienkolabs/breeze/crypto"
+	"github.com/lienkolabs/breeze/protocol/chain"
 )
 
-type Mutation struct {
+type Mutations struct {
 	DeltaWallets  map[crypto.Hash]int
 	DeltaDeposits map[crypto.Hash]int
 }
 
-func NewMutation() *Mutation {
-	return &Mutation{
-		DeltaWallets: make(map[crypto.Hash]int),
+func NewMutations() *Mutations {
+	return &Mutations{
+		DeltaWallets:  make(map[crypto.Hash]int),
+		DeltaDeposits: make(map[crypto.Hash]int),
 	}
 }
 
-func (m *Mutation) DeltaBalance(hash crypto.Hash) int {
-	balance := m.DeltaWallets[hash]
-	return balance
+func (m *Mutations) DeltaBalance(hash crypto.Hash) int {
+	value := m.DeltaWallets[hash]
+	return value
 }
 
-func GroupBlockMutations(mutations []*Mutation) *Mutation {
-	grouped := NewMutation()
-	for _, mutation := range mutations {
-		for acc, balance := range mutation.DeltaWallets {
-			if oldBalance, ok := grouped.DeltaWallets[acc]; ok {
-				grouped.DeltaWallets[acc] = oldBalance + balance
-			} else {
-				grouped.DeltaWallets[acc] = balance
+func (m *Mutations) Append(array []chain.Mutations) chain.Mutations {
+	grouped := NewMutations()
+	all := []*Mutations{m}
+	if len(array) > 0 {
+		for _, a := range array {
+			if mutation, ok := a.(*Mutations); ok {
+				all = append(all, mutation)
 			}
 		}
-		for acc, balance := range mutation.DeltaDeposits {
-			if oldBalance, ok := grouped.DeltaDeposits[acc]; ok {
-				grouped.DeltaDeposits[acc] = oldBalance + balance
+	}
+	for _, mutations := range all {
+		for hash, delta := range mutations.DeltaWallets {
+			if value, ok := grouped.DeltaWallets[hash]; ok {
+				grouped.DeltaWallets[hash] = value + delta
 			} else {
-				grouped.DeltaDeposits[acc] = balance
+				grouped.DeltaWallets[hash] = delta
+			}
+		}
+		for hash, delta := range mutations.DeltaDeposits {
+			if value, ok := grouped.DeltaDeposits[hash]; ok {
+				grouped.DeltaDeposits[hash] = value + delta
+			} else {
+				grouped.DeltaDeposits[hash] = delta
 			}
 		}
 	}
 	return grouped
-}
-
-type MutatingState struct {
-	State     *State
-	Mutations *Mutation
-}
-
-func (c *MutatingState) Balance(hash crypto.Hash) uint64 {
-	_, balance := c.State.Wallets.BalanceHash(hash)
-	if c.Mutations == nil {
-		return balance
-	}
-	delta := c.Mutations.DeltaBalance(hash)
-	if delta < 0 {
-		balance = balance - uint64(-delta)
-	} else {
-		balance = balance + uint64(delta)
-	}
-	return balance
 }

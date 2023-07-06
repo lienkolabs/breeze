@@ -30,7 +30,6 @@ package dh
 // the SHA256 hash on the agreed key is used as a key for an AES 256 Cipher.
 
 import (
-	"fmt"
 	"math/rand"
 
 	"github.com/lienkolabs/breeze/crypto"
@@ -58,7 +57,6 @@ func NewEphemeralKey() (crypto.PrivateKey, crypto.Token) {
 func ConsensusKey(local crypto.PrivateKey, remote crypto.Token) []byte {
 	agreedKey, err := curve25519.X25519(local[0:32], remote[:])
 	if err != nil {
-		fmt.Println("------------------", err)
 		return nil
 	}
 	hashed := crypto.Hasher(agreedKey)

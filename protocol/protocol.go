@@ -1,13 +1,6 @@
 package protocol
 
-import (
-	"log"
-
-	"github.com/lienkolabs/breeze/crypto"
-
-	"github.com/lienkolabs/breeze/protocol/state"
-)
-
+/*
 func Genesis(credentials crypto.PrivateKey) *ValidatorNode {
 	token := credentials.PublicKey()
 	genesis := state.NewGenesisStateWithToken(token)
@@ -34,7 +27,8 @@ type Blockchain struct {
 	CommitState     *state.State
 	Uncommitted     []*Block
 }
-
+*/
+/*
 func (v *ValidatorNode) IncorporateBlock(block *Block) {
 	v.Chain.Uncommitted = append(v.Chain.Uncommitted, block)
 }
@@ -64,7 +58,7 @@ func (v *ValidatorNode) NextBlock(against, epoch uint64) *Block {
 		if parentCount > len(v.Chain.Uncommitted) {
 			log.Fatalf("unexpected error: checkpoint beyond known block")
 		}
-		mutations := make([]*state.Mutation, parentCount)
+		mutations := make([]*state.Mutations, parentCount)
 		for n := 0; n < parentCount; n++ {
 			mutations[n] = v.Chain.Uncommitted[n].blockMutations
 		}
@@ -84,3 +78,4 @@ func (c Blockchain) Commit(epoch uint64) bool {
 	}
 	return true
 }
+*/

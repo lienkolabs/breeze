@@ -1,180 +1,115 @@
 package echo
 
 import (
-	"fmt"
-	"net"
-	"sync"
+	"errors"
 	"time"
 
 	"github.com/lienkolabs/breeze/crypto"
 	"github.com/lienkolabs/breeze/network"
-	"github.com/lienkolabs/breeze/network/trusted"
-	"github.com/lienkolabs/breeze/util"
 )
 
-type NullSocialProtocol struct{}
-
-func (n NullSocialProtocol) Validate(data []byte) bool {
-	return true
+// this is a no ambiguity block interface. only one block will be provided for
+// each epoch, and only one block will be live for validation at each instant.
+// commit can be delayed nonetheless
+type ProtocolValidator interface {
+	Validate(action []byte) bool
+	NextBlock(epoch, checkpoint uint64, checkpointHash crypto.Hash, publisher crypto.Token) error
+	SealBlock(publishedAt time.Time, hash crypto.Hash, signature crypto.Signature) error
+	CommitBlock(epoch uint64, blockhash crypto.Hash, previousblockhash crypto.Hash, invalidated []crypto.Hash) error
+	RolloverBlock(epoch uint64) error
+	Shutdown()
 }
 
-func (n NullSocialProtocol) CommitBlock(epoch uint64, hash crypto.Hash) {
+type ProtocolNode struct {
+	Validator       ProtocolValidator
+	IncomingAddress string
+	IncomingToken   crypto.Token
+	OutcomingPort   int
+	Credentials     crypto.PrivateKey
+	Firewall        network.ValidateConnection
+	listener        *Listener
+	broadcast       *BroadcastPool
+	shutdown        chan struct{}
 }
 
-func (n NullSocialProtocol) NextBlock(epoch, checkpoint uint64, hash crypto.Hash, token crypto.Token, timestamp time.Time) {
+func (p *ProtocolNode) Shutdown() {
+	p.shutdown <- struct{}{}
 }
 
-type SocialProtocol interface {
-	Validate([]byte) bool
-	CommitBlock(uint64)
-	NextBlock(uint64)
-	RolloverBlock(uint64)
-	Shutdown() error
-}
-
-func StartNode(social SocialProtocol, credentials crypto.PrivateKey, validator network.ValidateConnection, listenPort int) (*Node, error) {
-	node := &Node{
-		mu:       sync.Mutex{},
-		outbound: make(map[crypto.Token]*listener),
-		social:   social,
+func (p *ProtocolNode) Start() error {
+	if p.Validator == nil {
+		return errors.New("protocol node must have a valid protocol validator")
 	}
-
-	listeners, err := net.Listen("tcp", fmt.Sprintf(":%v", listenPort))
-	if err != nil {
-		return nil, err
-	}
-
-	listenersChan := make(chan trusted.Message)
-	shutdownConnection := make(chan crypto.Token)
-
-	// listen connecttions
-	go func() {
-		for {
-			if conn, err := listeners.Accept(); err == nil {
-				trustedConn, err := trusted.PromoteConnection(conn, credentials, validator)
-				if err != nil {
-					conn.Close()
-				} else {
-					node.mu.Lock()
-					node.outbound[trustedConn.Token] = &listener{
-						connection: trustedConn,
-					}
-					node.mu.Unlock()
-					trustedConn.Listen(listenersChan, shutdownConnection)
-				}
-			} else {
-				return
-			}
-		}
-	}()
-
-	// listen
-	go func() {
-		for {
-			select {
-			case token := <-shutdownConnection:
-				node.mu.Lock()
-				if conn, ok := node.outbound[token]; ok {
-					conn.connection.Shutdown()
-				}
-				delete(node.outbound, token)
-				node.mu.Unlock()
-			case msg := <-listenersChan:
-				if msg.Data[0] == subscribeMsg {
-					if trusted, ok := node.outbound[msg.Token]; ok && len(msg.Data) == 5 {
-						for n := 0; n < 4; n++ {
-							trusted.code[n] = msg.Data[n+1]
-						}
-					}
-				}
-			}
-		}
-	}()
-
-	return nil, nil
-}
-
-type listener struct {
-	connection *trusted.SignedConnection
-	code       ProtocolCode
-}
-
-type Node struct {
-	mu       sync.Mutex
-	social   SocialProtocol
-	outbound map[crypto.Token]*listener
-}
-
-func (n *Node) ConntectTo(address string, token crypto.Token, credentials crypto.PrivateKey) error {
-	receiving, err := trusted.Dial(address, credentials, token)
+	var err error
+	p.listener, err = NewListener(p.Credentials, p.IncomingAddress, p.IncomingToken)
 	if err != nil {
 		return err
 	}
+	p.broadcast, err = NewBroadcastPool(p.Credentials, p.Firewall, p.OutcomingPort)
+	if err != nil {
+		return err
+	}
+	p.shutdown = make(chan struct{})
 
 	go func() {
 		for {
-			if msg, err := receiving.Read(); err == nil {
-				n.Incorporate(msg)
+			select {
+			case msg := <-p.listener.Incoming:
+				p.incorporate(msg)
+			case <-p.shutdown:
+				p.listener.Shutdown()
+				p.broadcast.Shutdown()
+				return
 			}
 		}
+
 	}()
 	return nil
 }
 
-func (n *Node) CommitBlock(epoch uint64) {
-	n.social.CommitBlock(epoch)
-	msg := []byte{commitBlockMsg}
-	util.PutUint64(epoch, &msg)
-	n.Broadcast(msg)
-}
-
-func (n *Node) RolloverBlock(epoch uint64) {
-	n.social.RolloverBlock(epoch)
-	msg := []byte{rolloverBlockMsg}
-	util.PutUint64(epoch, &msg)
-	n.Broadcast(msg)
-}
-
-func (n *Node) NextBlock(epoch uint64) {
-	n.social.NextBlock(epoch)
-	msg := []byte{nextBlockMsg}
-	util.PutUint64(epoch, &msg)
-	n.Broadcast(msg)
-}
-
-func (n *Node) Broadcast(msg []byte) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	for _, conn := range n.outbound {
-		conn.connection.Send(msg)
-	}
-}
-
-func (n *Node) Incorporate(msg []byte) {
+func (node *ProtocolNode) incorporate(msg []byte) bool {
 	if len(msg) == 0 {
-		return
+		return false
 	}
-	if msg[0] == commitBlockMsg || msg[0] == rolloverBlockMsg || msg[0] == nextBlockMsg {
+	if msg[0] == commitBlockMsg || msg[0] == rolloverBlockMsg || msg[0] == nextBlockMsg || msg[0] == sealBLockMsg {
 		if len(msg) != 9 {
-			return
+			return false
 		}
-		epoch, _ := util.ParseUint64(msg, 1)
 		switch msg[0] {
 		case nextBlockMsg:
-			n.social.CommitBlock(epoch)
+			header := ParseBlockHeader(msg)
+			if header == nil {
+				return false
+			}
+			node.Validator.NextBlock(header.Epoch, header.Checkpoint, header.CheckpointHash, header.Publisher)
 		case commitBlockMsg:
-			n.social.CommitBlock(epoch)
+			commit := ParseCommitBlock(msg)
+			if commit == nil {
+				return false
+			}
+			node.Validator.CommitBlock(commit.Epoch, commit.Hash, commit.ParentHash, commit.Invalidate)
 		case rolloverBlockMsg:
-			n.social.RolloverBlock(epoch)
+			rollover := ParseRolloverBlock(msg)
+			if rollover == nil {
+				return false
+			}
+			node.Validator.RolloverBlock(rollover.Epoch)
+		case sealBLockMsg:
+			tail := ParseBlockTail(msg)
+			if tail == nil {
+				return false
+			}
+			node.Validator.SealBlock(tail.Timestamp, tail.Hash, tail.Signature)
 		}
-		n.Broadcast(msg)
-		return
+		node.broadcast.Broadcast(msg)
+		return true
 	}
 	if msg[0] != socialMsg {
-		return
+		return false
 	}
-	if !n.social.Validate(msg[1:]) {
-		return
+	if !node.Validator.Validate(msg[1:]) {
+		return false
 	}
-	n.Broadcast(msg)
+	node.broadcast.Broadcast(msg)
+	return true
 }

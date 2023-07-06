@@ -4,31 +4,56 @@ package poa
 import (
 	"time"
 
-	"github.com/lienkolabs/breeze/protocol"
-	"github.com/lienkolabs/breeze/protocol/actions"
+	"github.com/lienkolabs/breeze/crypto"
+	"github.com/lienkolabs/breeze/network/echo"
+	"github.com/lienkolabs/breeze/network/trusted"
+	"github.com/lienkolabs/breeze/protocol/chain"
+	"github.com/lienkolabs/breeze/protocol/state"
 )
+
+const ActionsGatewayPort = 3100
+const BroadcastPoolPort = 3101
 
 var blockInterval = time.Second
 
-func NewProofOfAuthorityValidator(network *Node, node *protocol.ValidatorNode) error {
-	block := node.NextBlock(0, 1)
+func NewProofOfAuthorityValidator(credentials crypto.PrivateKey) error {
+	actions := make(chan []byte)
+	gateway, err := echo.NewActionsGateway(ActionsGatewayPort, credentials, trusted.AcceptAllConnections, actions)
+	if err != nil {
+		return err
+	}
+	pool, err := echo.NewBroadcastPool(credentials, trusted.AcceptAllConnections, BroadcastPoolPort)
+	if err != nil {
+		return err
+	}
+	blockstate := state.NewGenesisStateWithToken(credentials.PublicKey())
 	epoch := uint64(0)
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(blockInterval)
+	block := &chain.Block{
+		Epoch:      1,
+		CheckPoint: 0,
+		Parent:     crypto.ZeroHash,
+		Publisher:  credentials.PublicKey(),
+		Actions:    make([][]byte, 0),
+	}
+	validator := blockstate.Validator(state.NewMutations(), 1)
 	go func() {
 		for {
 			select {
 			case <-ticker.C:
-				block.Seal(node.Credentials)
-				network.broadcast.BrodcastSealBlock(block.PublishedAt, block.FeesCollected, block.Hash, block.Signature)
-				node.Commit(block.Epoch(), block.Hash)
-				network.broadcast.BrodcastCommitBlock(block.Epoch(), block.Hash)
+				block.Seal(credentials)
+				pool.BrodcastSealBlock(block.PublishedAt, block.Hash, block.SealSignature)
+				pool.BrodcastCommitBlock(epoch, block.Hash)
+				blockstate.Incorporate(validator)
+				hash := block.Hash
 				epoch += 1
-				block = node.NextBlock(epoch, epoch-1)
-				network.broadcast.BrodcastNextBlock(block.Epoch(), block.CheckPoint, block.Publisher)
-			case msg := <-network.gateway.Actions:
-				action := actions.ParseAction(msg)
-				if action != nil && block.Incorporate(action) {
-					network.broadcast.BroadcastAction(msg)
+				validator = blockstate.Validator(state.NewMutations(), epoch)
+				block = block.NewBlock()
+				pool.BrodcastNextBlock(epoch, epoch-1, hash, block.Publisher)
+			case action := <-gateway.Actions:
+				if validator.Validate(action) {
+					block.Actions = append(block.Actions, action)
+					pool.BroadcastAction(action)
 				}
 			}
 		}

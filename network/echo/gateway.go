@@ -11,6 +11,7 @@ import (
 	"github.com/lienkolabs/breeze/network/trusted"
 )
 
+// stats for all live connections to the gateway
 type Stats struct {
 	Token                 crypto.Token
 	EstablishedConnection time.Time
@@ -23,6 +24,7 @@ type connectionWithStats struct {
 	count int
 }
 
+// a gateway provides connectivity to submit actions to the breeze network
 type Gateway struct {
 	mu      sync.Mutex
 	inbound map[crypto.Token]*connectionWithStats
@@ -48,6 +50,12 @@ func (g *Gateway) Stats() []Stats {
 	return all
 }
 
+// port is the listening port for upcomming connections.
+// credentials to provide trusted connectivity on behalf of the responsible
+// for the gateway.
+// validate the tokens of the new connections. use trusted.AcceptAllConnection
+// for no policy
+// action is the channel through which all actions received will be transmitted.
 func NewActionsGateway(port int, credentials crypto.PrivateKey, validate network.ValidateConnection, action chan []byte) (*Gateway, error) {
 	listeners, err := net.Listen("tcp", fmt.Sprintf(":%v", port))
 	if err != nil {

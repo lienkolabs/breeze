@@ -18,6 +18,28 @@ func PutSignature(sign crypto.Signature, data *[]byte) {
 	*data = append(*data, sign[:]...)
 }
 
+func PutActionsArray(b [][]byte, data *[]byte) {
+	count := uint32(len(b))
+	PutUint32(count, data)
+	if count == 0 {
+		return
+	}
+	for _, bytes := range b {
+		PutByteArray(bytes, data)
+	}
+}
+
+func PutHashArray(b []crypto.Hash, data *[]byte) {
+	count := uint32(len(b))
+	PutUint32(count, data)
+	if count == 0 {
+		return
+	}
+	for _, bytes := range b {
+		PutHash(bytes, data)
+	}
+}
+
 func PutByteArray(b []byte, data *[]byte) {
 	if len(b) == 0 {
 		*data = append(*data, 0, 0)
@@ -37,6 +59,15 @@ func PutString(value string, data *[]byte) {
 
 func PutUint16(v uint16, data *[]byte) {
 	*data = append(*data, byte(v), byte(v>>8))
+}
+
+func PutUint32(v uint32, data *[]byte) {
+	b := make([]byte, 8)
+	b[0] = byte(v)
+	b[1] = byte(v >> 8)
+	b[2] = byte(v >> 16)
+	b[3] = byte(v >> 24)
+	*data = append(*data, b...)
 }
 
 func PutUint64(v uint64, data *[]byte) {
@@ -79,6 +110,32 @@ func ParseToken(data []byte, position int) (crypto.Token, int) {
 	}
 	copy(token[:], data[position:position+crypto.TokenSize])
 	return token, position + crypto.TokenSize
+}
+
+func ParseActionsArray(data []byte, position int) ([][]byte, int) {
+	if position+3 >= len(data) {
+		return [][]byte{}, position
+	}
+	var count uint32
+	count, position = ParseUint32(data, position)
+	array := make([][]byte, int(count))
+	for n := 0; n < int(count); n++ {
+		array[n], position = ParseByteArray(data, position)
+	}
+	return array, position
+}
+
+func ParseHashArray(data []byte, position int) ([]crypto.Hash, int) {
+	if position+3 >= len(data) {
+		return []crypto.Hash{}, position
+	}
+	var count uint32
+	count, position = ParseUint32(data, position)
+	array := make([]crypto.Hash, int(count))
+	for n := 0; n < int(count); n++ {
+		array[n], position = ParseHash(data, position)
+	}
+	return array, position
 }
 
 func ParseHash(data []byte, position int) (crypto.Hash, int) {
@@ -162,6 +219,17 @@ func ParseUint16(data []byte, position int) (uint16, int) {
 	value := uint16(data[position+0]) |
 		uint16(data[position+1])<<8
 	return value, position + 2
+}
+
+func ParseUint32(data []byte, position int) (uint32, int) {
+	if position+3 >= len(data) {
+		return 0, position + 4
+	}
+	value := uint32(data[position+0]) |
+		uint32(data[position+1])<<8 |
+		uint32(data[position+2])<<16 |
+		uint32(data[position+3])<<24
+	return value, position + 4
 }
 
 func ParseUint64(data []byte, position int) (uint64, int) {

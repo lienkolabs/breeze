@@ -81,6 +81,14 @@ func NewBroadcastPool(credentials crypto.PrivateKey, validator network.ValidateC
 	return pool, nil
 }
 
+func (pool *BroadcastPool) Shutdown() {
+	pool.mu.Lock()
+	for _, conn := range pool.conn {
+		conn.conn.Shutdown()
+	}
+	defer pool.mu.Unlock()
+}
+
 func (pool *BroadcastPool) BroadcastAction(data []byte) {
 	msg := []byte{socialMsg}
 	msg = append(msg, data...)
@@ -95,22 +103,22 @@ func (pool *BroadcastPool) BroadcastRollover(epoch uint64) {
 	pool.Broadcast(msg)
 }
 
-func (pool *BroadcastPool) BrodcastSealBlock(timestamp time.Time, fees uint64, hash crypto.Hash, signature crypto.Signature) {
+func (pool *BroadcastPool) BrodcastSealBlock(timestamp time.Time, hash crypto.Hash, signature crypto.Signature) {
 	seal := BlockTail{
-		Timestamp:     timestamp,
-		FeesCollected: fees,
-		Hash:          hash,
-		Signature:     signature,
+		Timestamp: timestamp,
+		Hash:      hash,
+		Signature: signature,
 	}
 	msg := seal.Serialize()
 	pool.Broadcast(msg)
 }
 
-func (pool *BroadcastPool) BrodcastNextBlock(epoch, checkpoint uint64, publisher crypto.Token) {
+func (pool *BroadcastPool) BrodcastNextBlock(epoch, checkpoint uint64, checkpointHash crypto.Hash, publisher crypto.Token) {
 	nextBlock := BlockHeader{
-		Epoch:      epoch,
-		Checkpoint: checkpoint,
-		Publisher:  publisher,
+		Epoch:          epoch,
+		Checkpoint:     checkpoint,
+		CheckpointHash: checkpointHash,
+		Publisher:      publisher,
 	}
 	msg := nextBlock.Serialize()
 	pool.Broadcast(msg)

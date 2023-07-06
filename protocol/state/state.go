@@ -2,12 +2,36 @@ package state
 
 import (
 	"github.com/lienkolabs/breeze/crypto"
+	"github.com/lienkolabs/breeze/protocol/chain"
 )
 
 type State struct {
 	Epoch    uint64
 	Wallets  *Wallet // Available tokens per hash of crypto key
 	Deposits *Wallet // Available stakes per hash of crypto key
+}
+
+func (s *State) NewMutations() chain.Mutations {
+	return NewMutations()
+}
+
+func (s *State) Validator(chain.Mutations, uint64) chain.MutatingState {
+	return &MutatingState{
+		State:     s,
+		mutations: NewMutations(),
+	}
+}
+
+func (s *State) Incorporate(v chain.MutatingState) {
+	ms, ok := v.(*MutatingState)
+	if !ok {
+		return
+	}
+	s.IncorporateMutations(ms.mutations)
+}
+
+func (s *State) Shutdown() {
+	s.Wallets.Close()
 }
 
 func NewGenesisState() (*State, crypto.PrivateKey) {
@@ -33,7 +57,7 @@ func NewGenesisStateWithToken(token crypto.Token) *State {
 	return &state
 }
 
-func (s *State) IncorporateMutations(m *Mutation) {
+func (s *State) IncorporateMutations(m *Mutations) {
 	for hash, delta := range m.DeltaWallets {
 		if delta > 0 {
 			s.Wallets.CreditHash(hash, uint64(delta))

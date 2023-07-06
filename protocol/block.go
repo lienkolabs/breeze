@@ -1,15 +1,6 @@
 package protocol
 
-import (
-	"fmt"
-	"time"
-
-	"github.com/lienkolabs/breeze/crypto"
-	"github.com/lienkolabs/breeze/protocol/actions"
-	"github.com/lienkolabs/breeze/protocol/state"
-	"github.com/lienkolabs/breeze/util"
-)
-
+/*
 type Block struct {
 	epoch          uint64
 	Parent         crypto.Hash
@@ -21,7 +12,7 @@ type Block struct {
 	FeesCollected  uint64
 	Signature      crypto.Signature
 	validator      *state.MutatingState
-	blockMutations *state.Mutation
+	blockMutations *state.Mutations
 }
 
 func NewBlock(parent crypto.Hash, checkpoint, epoch uint64, publisher crypto.Token, validator *state.MutatingState) *Block {
@@ -32,7 +23,7 @@ func NewBlock(parent crypto.Hash, checkpoint, epoch uint64, publisher crypto.Tok
 		Publisher:      publisher,
 		Actions:        make([][]byte, 0),
 		validator:      validator,
-		blockMutations: state.NewMutation(),
+		blockMutations: state.NewMutations(),
 	}
 }
 
@@ -156,7 +147,7 @@ func ParseBlock(data []byte) *Block {
 		fmt.Println("wrong signature")
 		return nil
 	}
-	block.blockMutations = state.NewMutation()
+	block.blockMutations = state.NewMutations()
 	return &block
 }
 
@@ -185,3 +176,4 @@ func (b *Block) JSONSimple() string {
 	bulk.PutBase64("signature", b.Signature[:])
 	return bulk.ToString()
 }
+*/
