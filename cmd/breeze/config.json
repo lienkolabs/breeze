@@ -1,0 +1,6 @@
+{
+    "gatewayPort": 3000,
+    "blockBroadcastPort": 3001,
+    "walletDataPath": "./",
+    "secureVaultPath": "vault.dat"
+}

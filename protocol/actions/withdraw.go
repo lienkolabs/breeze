@@ -13,6 +13,10 @@ type Withdraw struct {
 	Signature crypto.Signature
 }
 
+func (w *Withdraw) Tokens() []crypto.Token {
+	return []crypto.Token{w.Token}
+}
+
 func (w *Withdraw) FeePaid() uint64 {
 	return w.Fee
 }

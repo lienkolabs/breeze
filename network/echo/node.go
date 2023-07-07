@@ -104,7 +104,7 @@ func (node *ProtocolNode) incorporate(msg []byte) bool {
 		node.broadcast.Broadcast(msg)
 		return true
 	}
-	if msg[0] != socialMsg {
+	if msg[0] != actionMsg {
 		return false
 	}
 	if !node.Validator.Validate(msg[1:]) {

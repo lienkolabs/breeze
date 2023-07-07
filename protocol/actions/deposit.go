@@ -13,6 +13,10 @@ type Deposit struct {
 	Signature crypto.Signature
 }
 
+func (d *Deposit) Tokens() []crypto.Token {
+	return []crypto.Token{d.Token}
+}
+
 func (d *Deposit) FeePaid() uint64 {
 	return d.Fee
 }

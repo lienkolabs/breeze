@@ -2,6 +2,8 @@
 package poa
 
 import (
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/lienkolabs/breeze/crypto"
@@ -11,22 +13,19 @@ import (
 	"github.com/lienkolabs/breeze/protocol/state"
 )
 
-const ActionsGatewayPort = 3100
-const BroadcastPoolPort = 3101
-
 var blockInterval = time.Second
 
-func NewProofOfAuthorityValidator(credentials crypto.PrivateKey) error {
+func NewProofOfAuthorityValidator(credentials crypto.PrivateKey, gatewayPort, broadcastPort int, walletPath string) error {
 	actions := make(chan []byte)
-	gateway, err := echo.NewActionsGateway(ActionsGatewayPort, credentials, trusted.AcceptAllConnections, actions)
+	gateway, err := echo.NewActionsGateway(gatewayPort, credentials, trusted.AcceptAllConnections, actions)
 	if err != nil {
 		return err
 	}
-	pool, err := echo.NewBroadcastPool(credentials, trusted.AcceptAllConnections, BroadcastPoolPort)
+	pool, err := echo.NewBroadcastPool(credentials, trusted.AcceptAllConnections, broadcastPort)
 	if err != nil {
 		return err
 	}
-	blockstate := state.NewGenesisStateWithToken(credentials.PublicKey())
+	blockstate := state.NewGenesisStateWithToken(credentials.PublicKey(), walletPath)
 	epoch := uint64(0)
 	ticker := time.NewTicker(blockInterval)
 	block := &chain.Block{
@@ -44,10 +43,12 @@ func NewProofOfAuthorityValidator(credentials crypto.PrivateKey) error {
 				block.Seal(credentials)
 				pool.BrodcastSealBlock(block.PublishedAt, block.Hash, block.SealSignature)
 				pool.BrodcastCommitBlock(epoch, block.Hash)
-				blockstate.Incorporate(validator)
+				blockstate.Incorporate(validator, block.Publisher)
 				hash := block.Hash
 				epoch += 1
 				validator = blockstate.Validator(state.NewMutations(), epoch)
+				text, _ := json.Marshal(block)
+				fmt.Println(string(text))
 				block = block.NewBlock()
 				pool.BrodcastNextBlock(epoch, epoch-1, hash, block.Publisher)
 			case action := <-gateway.Actions:

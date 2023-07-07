@@ -8,12 +8,13 @@ import (
 )
 
 const (
-	socialMsg byte = iota
+	actionMsg byte = iota
 	nextBlockMsg
 	sealBLockMsg
 	commitBlockMsg
 	rolloverBlockMsg
 	subscribeMsg
+	receiveTokenMsg
 )
 
 const protocolPos = 9
@@ -27,6 +28,35 @@ func validateCode(code ProtocolCode, data []byte) bool {
 		}
 	}
 	return true
+}
+
+type ReceiveTokens struct {
+	Tokens    []crypto.Token
+	FromEpoch uint64
+}
+
+func (r *ReceiveTokens) Serialize() []byte {
+	data := []byte{receiveTokenMsg}
+	util.PutTokenArray(r.Tokens, &data)
+	util.PutUint64(r.FromEpoch, &data)
+	return data
+}
+
+func ParseReceiveTokens(data []byte) *ReceiveTokens {
+	if len(data) == 0 {
+		return nil
+	}
+	if data[0] != receiveTokenMsg {
+		return nil
+	}
+	position := 1
+	var receive ReceiveTokens
+	receive.Tokens, position = util.ParseTokenArray(data, position)
+	receive.FromEpoch, position = util.ParseUint64(data, position)
+	if position != len(data) {
+		return nil
+	}
+	return &receive
 }
 
 type BlockHeader struct {

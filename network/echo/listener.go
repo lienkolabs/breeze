@@ -63,7 +63,7 @@ func (l *Listener) Shutdown() {
 
 func (l *Listener) NewMessage(msg []byte) {
 	switch msg[0] {
-	case socialMsg:
+	case actionMsg:
 	case nextBlockMsg:
 	case sealBLockMsg:
 	case commitBlockMsg:

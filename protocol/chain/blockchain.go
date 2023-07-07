@@ -4,13 +4,14 @@
 Rules for the chain mechanism:
 
  1. blocks are proposed for a certain epoch and against a certain checkpoint
-    priot to that epoch.
+    prior to that epoch.
  2. the block associated to a checkpoint must be sealed, otherwise it is not a
-    valid checkpoint. sealed blocks cannot append new actions.
+    valid checkpoint. sealed blocks cannot append new actions. They are not
+    considerer final because certain actions can be removed by the commit phase.
  2. actions for the block are temporarily validated against the state derived
     at the checkpoint epoch.
  3. blocks are sealed, a hash is calculated, and the hash is signed by the
-    publisher of the block.
+    publisher of the block. the commit phase is done by every node
  4. blocks are commited with all transactions validated with the checkpoint of
     the epoch immediately before the block epoch. Actions that were approved as
     validated by the original checkpoint are marked as invalidated by the commit
@@ -23,6 +24,7 @@ import (
 	"time"
 
 	"github.com/lienkolabs/breeze/crypto"
+	"github.com/lienkolabs/breeze/protocol/actions"
 )
 
 const KeepLastN = 100
@@ -39,7 +41,7 @@ type Mutations interface {
 type State interface {
 	NewMutations() Mutations
 	Validator(Mutations, uint64) MutatingState
-	Incorporate(MutatingState)
+	Incorporate(MutatingState, crypto.Token)
 	Shutdown()
 }
 
@@ -50,6 +52,7 @@ type State interface {
 // that means, the rollover before last commit epoch is not anticipated on the
 // structure and must be implemented separatedly.
 type Chain struct {
+	Incorporated    *IncorporatedActions
 	Credentials     crypto.PrivateKey
 	LastCommitEpoch uint64
 	LastCommitHash  crypto.Hash
@@ -68,7 +71,7 @@ func (c *Chain) NewBlock(epoch, checkpoint uint64, publisher crypto.Token) (*Blo
 	}
 	mutations := c.CommitState.NewMutations()
 	if parent.Epoch >= c.LastCommitEpoch {
-		mutations = mutations.Append([]Mutations{parent.validator.Mutations()})
+		mutations = mutations.Append([]Mutations{parent.Validator.Mutations()})
 	}
 	return &Block{
 		Epoch:      epoch,
@@ -76,7 +79,7 @@ func (c *Chain) NewBlock(epoch, checkpoint uint64, publisher crypto.Token) (*Blo
 		Parent:     parent.Hash,
 		Publisher:  publisher,
 		Actions:    make([][]byte, 0),
-		validator:  c.CommitState.Validator(mutations, checkpoint),
+		Validator:  c.CommitState.Validator(mutations, checkpoint),
 	}, nil
 }
 
@@ -89,14 +92,22 @@ func (c *Chain) CommitNextBlock() bool {
 		validator := c.CommitState.Validator(nil, c.LastCommitEpoch)
 		block.Revalidate(validator)
 	}
-	c.CommitState.Incorporate(block.validator)
+	c.CommitState.Incorporate(block.Validator, block.Publisher)
 	c.LastCommitEpoch = block.Epoch
 	c.LastCommitHash = block.Hash
 	return true
 }
 
 func (c *Chain) Validate(action []byte) bool {
-	return true
+	epoch := actions.GetEpochFromByteArray(action)
+	if epoch == 0 || epoch > c.LiveBlock.Epoch || (epoch+MaxProtocolEpoch < c.LiveBlock.Epoch) {
+		return false
+	}
+	hash := crypto.Hasher(action)
+	if !c.Incorporated.IsNew(hash, epoch, c.LiveBlock.CheckPoint) {
+		return false
+	}
+	return c.LiveBlock.Validate(action)
 }
 
 func (c *Chain) NextBlock(epoch, checkpoint uint64, checkpointHash crypto.Hash, publisher crypto.Token) error {
@@ -147,7 +158,7 @@ func (c *Chain) CommitBlock(epoch uint64, blockhash crypto.Hash, previousblockha
 			validator.Validate(action)
 		}
 	}
-	c.CommitState.Incorporate(validator)
+	c.CommitState.Incorporate(validator, block.Publisher)
 	block.PreviousHash = previousblockhash
 	block.Invalidate = invalidated
 	c.LastCommitEpoch += 1

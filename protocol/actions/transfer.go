@@ -14,6 +14,23 @@ type Transfer struct {
 	Signature crypto.Signature
 }
 
+func (t *Transfer) Tokens() []crypto.Token {
+	tokens := []crypto.Token{t.From}
+	for _, to := range t.To {
+		isNew := true
+		for _, t := range tokens {
+			if t.Equal(to.Token) {
+				isNew = false
+				break
+			}
+		}
+		if isNew {
+			tokens = append(tokens, to.Token)
+		}
+	}
+	return tokens
+}
+
 func (t *Transfer) FeePaid() uint64 {
 	return t.Fee
 }

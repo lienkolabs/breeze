@@ -13,6 +13,10 @@ type Void struct {
 	Signature crypto.Signature
 }
 
+func (v *Void) Tokens() []crypto.Token {
+	return []crypto.Token{v.Wallet}
+}
+
 func (v *Void) FeePaid() uint64 {
 	return v.Fee
 }

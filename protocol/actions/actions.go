@@ -34,6 +34,7 @@ type Action interface {
 	Epoch() uint64
 	Kind() byte
 	FeePaid() uint64
+	Tokens() []crypto.Token
 }
 
 func NewPayment(debitAcc crypto.Hash, value uint64) *Payment {

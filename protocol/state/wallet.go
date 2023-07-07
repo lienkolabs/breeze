@@ -124,3 +124,14 @@ func NewMemoryWalletStore(epoch uint64, bitsForBucket int64) *Wallet {
 	w.hs.Start()
 	return w
 }
+
+func NewFileWalletStore(filePath string, epoch uint64, bitsForBucket int64) *Wallet {
+	nbytes := 56 + int64(1<<bitsForBucket)*(40*6+8)
+	bytestore := papirus.NewFileStore(filePath, nbytes)
+	Bucketstore := papirus.NewBucketStore(40, 6, bytestore)
+	w := &Wallet{
+		hs: papirus.NewHashStore("wallet", Bucketstore, int(bitsForBucket), creditOrDebit),
+	}
+	w.hs.Start()
+	return w
+}

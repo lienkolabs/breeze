@@ -18,7 +18,7 @@ type Block struct {
 	SealSignature crypto.Signature
 	PreviousHash  crypto.Hash
 	Invalidate    []crypto.Hash
-	validator     MutatingState
+	Validator     MutatingState
 }
 
 func (b *Block) NewBlock() *Block {
@@ -32,7 +32,7 @@ func (b *Block) NewBlock() *Block {
 }
 
 func (b *Block) Validate(action []byte) bool {
-	if !b.validator.Validate(action) {
+	if !b.Validator.Validate(action) {
 		return false
 	}
 	b.Actions = append(b.Actions, action)
@@ -101,5 +101,5 @@ func (b *Block) Revalidate(v MutatingState) {
 			b.Invalidate = append(b.Invalidate, hash)
 		}
 	}
-	b.validator = v
+	b.Validator = v
 }

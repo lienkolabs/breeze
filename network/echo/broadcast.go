@@ -90,7 +90,7 @@ func (pool *BroadcastPool) Shutdown() {
 }
 
 func (pool *BroadcastPool) BroadcastAction(data []byte) {
-	msg := []byte{socialMsg}
+	msg := []byte{actionMsg}
 	msg = append(msg, data...)
 	pool.Broadcast(msg)
 }

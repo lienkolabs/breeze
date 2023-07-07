@@ -40,6 +40,17 @@ func PutHashArray(b []crypto.Hash, data *[]byte) {
 	}
 }
 
+func PutTokenArray(b []crypto.Token, data *[]byte) {
+	count := uint32(len(b))
+	PutUint32(count, data)
+	if count == 0 {
+		return
+	}
+	for _, bytes := range b {
+		PutToken(bytes, data)
+	}
+}
+
 func PutByteArray(b []byte, data *[]byte) {
 	if len(b) == 0 {
 		*data = append(*data, 0, 0)
@@ -134,6 +145,19 @@ func ParseHashArray(data []byte, position int) ([]crypto.Hash, int) {
 	array := make([]crypto.Hash, int(count))
 	for n := 0; n < int(count); n++ {
 		array[n], position = ParseHash(data, position)
+	}
+	return array, position
+}
+
+func ParseTokenArray(data []byte, position int) ([]crypto.Token, int) {
+	if position+3 >= len(data) {
+		return []crypto.Token{}, position
+	}
+	var count uint32
+	count, position = ParseUint32(data, position)
+	array := make([]crypto.Token, int(count))
+	for n := 0; n < int(count); n++ {
+		array[n], position = ParseToken(data, position)
 	}
 	return array, position
 }

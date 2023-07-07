@@ -1,6 +1,8 @@
 package state
 
 import (
+	"fmt"
+
 	"github.com/lienkolabs/breeze/crypto"
 	"github.com/lienkolabs/breeze/protocol/chain"
 )
@@ -22,10 +24,16 @@ func (s *State) Validator(chain.Mutations, uint64) chain.MutatingState {
 	}
 }
 
-func (s *State) Incorporate(v chain.MutatingState) {
+func (s *State) Incorporate(v chain.MutatingState, publisher crypto.Token) {
 	ms, ok := v.(*MutatingState)
 	if !ok {
 		return
+	}
+	publisherHash := crypto.HashToken(publisher)
+	if delta, ok := ms.mutations.DeltaWallets[publisherHash]; ok {
+		ms.mutations.DeltaWallets[publisherHash] = delta + int(ms.FeesCollected)
+	} else {
+		ms.mutations.DeltaWallets[publisherHash] = int(ms.FeesCollected)
 	}
 	s.IncorporateMutations(ms.mutations)
 }
@@ -46,12 +54,23 @@ func NewGenesisState() (*State, crypto.PrivateKey) {
 	return &state, prvKey
 }
 
-func NewGenesisStateWithToken(token crypto.Token) *State {
-	state := State{
-		Epoch:    0,
-		Wallets:  NewMemoryWalletStore(0, 8),
-		Deposits: NewMemoryWalletStore(0, 8),
+func NewGenesisStateWithToken(token crypto.Token, filePath string) *State {
+	var state State
+	if filePath == "" {
+		state = State{
+			Epoch:    0,
+			Wallets:  NewMemoryWalletStore(0, 8),
+			Deposits: NewMemoryWalletStore(0, 8),
+		}
+	} else {
+		state = State{
+			Epoch:    0,
+			Wallets:  NewFileWalletStore(fmt.Sprintf("%vwallet.dat", filePath), 0, 8),
+			Deposits: NewFileWalletStore(fmt.Sprintf("%vdeposit.dat", filePath), 0, 8),
+		}
+
 	}
+
 	state.Wallets.Credit(token, 1e9)
 	state.Deposits.Credit(token, 1e9)
 	return &state
