@@ -29,11 +29,11 @@ func NewProofOfAuthorityValidator(credentials crypto.PrivateKey, gatewayPort, br
 	epoch := uint64(0)
 	ticker := time.NewTicker(blockInterval)
 	block := &chain.Block{
-		Epoch:      1,
-		CheckPoint: 0,
-		Parent:     crypto.ZeroHash,
-		Publisher:  credentials.PublicKey(),
-		Actions:    make([][]byte, 0),
+		Epoch:          1,
+		CheckPoint:     0,
+		CheckpointHash: crypto.ZeroHash,
+		Proposer:       credentials.PublicKey(),
+		Actions:        make([][]byte, 0),
 	}
 	validator := blockstate.Validator(state.NewMutations(), 1)
 	go func() {
@@ -41,16 +41,16 @@ func NewProofOfAuthorityValidator(credentials crypto.PrivateKey, gatewayPort, br
 			select {
 			case <-ticker.C:
 				block.Seal(credentials)
-				pool.BrodcastSealBlock(block.PublishedAt, block.Hash, block.SealSignature)
+				pool.BrodcastSealBlock(block.ProposedAt, block.Hash, block.SealSignature)
 				pool.BrodcastCommitBlock(epoch, block.Hash)
-				blockstate.Incorporate(validator, block.Publisher)
+				blockstate.Incorporate(validator, block.Proposer)
 				hash := block.Hash
 				epoch += 1
 				validator = blockstate.Validator(state.NewMutations(), epoch)
 				text, _ := json.Marshal(block)
 				fmt.Println(string(text))
 				block = block.NewBlock()
-				pool.BrodcastNextBlock(epoch, epoch-1, hash, block.Publisher)
+				pool.BrodcastNextBlock(epoch, epoch-1, hash, block.Proposer)
 			case action := <-gateway.Actions:
 				if validator.Validate(action) {
 					block.Actions = append(block.Actions, action)

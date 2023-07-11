@@ -81,15 +81,15 @@ func (l *BlockListener) NewMessage(msg []byte) {
 	case nextBlockMsg:
 		nextBlock := ParseBlockHeader(msg)
 		l.newBlock = &chain.Block{
-			Epoch:      nextBlock.Epoch,
-			CheckPoint: nextBlock.Checkpoint,
-			Parent:     nextBlock.CheckpointHash,
-			Publisher:  nextBlock.Publisher,
-			Actions:    make([][]byte, 0),
+			Epoch:          nextBlock.Epoch,
+			CheckPoint:     nextBlock.Checkpoint,
+			CheckpointHash: nextBlock.CheckpointHash,
+			Proposer:       nextBlock.Publisher,
+			Actions:        make([][]byte, 0),
 		}
 	case sealBLockMsg:
 		seal := ParseBlockTail(msg)
-		l.newBlock.PublishedAt = seal.Timestamp
+		l.newBlock.ProposedAt = seal.Timestamp
 		l.newBlock.Hash = seal.Hash
 		l.newBlock.SealSignature = seal.Signature
 		l.sealed[l.newBlock.Epoch] = l.newBlock

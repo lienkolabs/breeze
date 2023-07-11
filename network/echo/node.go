@@ -1,20 +1,12 @@
 package echo
 
-import (
-	"errors"
-	"time"
-
-	"github.com/lienkolabs/breeze/crypto"
-	"github.com/lienkolabs/breeze/network"
-)
-
 // this is a no ambiguity block interface. only one block will be provided for
 // each epoch, and only one block will be live for validation at each instant.
 // commit can be delayed nonetheless
-type ProtocolValidator interface {
+/*type ProtocolValidator interface {
 	Validate(action []byte) bool
 	NextBlock(epoch, checkpoint uint64, checkpointHash crypto.Hash, publisher crypto.Token) error
-	SealBlock(publishedAt time.Time, hash crypto.Hash, signature crypto.Signature) error
+	SealBlock(publishedAt time.Time, fees uint64, hash crypto.Hash, signature crypto.Signature) error
 	CommitBlock(epoch uint64, blockhash crypto.Hash, previousblockhash crypto.Hash, invalidated []crypto.Hash) error
 	RolloverBlock(epoch uint64) error
 	Shutdown()
@@ -41,7 +33,14 @@ func (p *ProtocolNode) Start() error {
 		return errors.New("protocol node must have a valid protocol validator")
 	}
 	var err error
-	p.listener, err = NewListener(p.Credentials, p.IncomingAddress, p.IncomingToken)
+
+	listenerConfig := BlockListenerConfig{
+		Credentials:         p.Credentials,
+		BlockServiceAddress: p.IncomingAddress,
+		BlockServiveToken:   p.IncomingToken,
+	}
+
+	p.listener, err = NewListener(&listenerConfig)
 	if err != nil {
 		return err
 	}
@@ -99,7 +98,7 @@ func (node *ProtocolNode) incorporate(msg []byte) bool {
 			if tail == nil {
 				return false
 			}
-			node.Validator.SealBlock(tail.Timestamp, tail.Hash, tail.Signature)
+			node.Validator.SealBlock(tail.Timestamp, 0, tail.Hash, tail.Signature)
 		}
 		node.broadcast.Broadcast(msg)
 		return true
@@ -113,3 +112,4 @@ func (node *ProtocolNode) incorporate(msg []byte) bool {
 	node.broadcast.Broadcast(msg)
 	return true
 }
+*/

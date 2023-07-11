@@ -96,7 +96,7 @@ func main() {
 					TimeStamp: count / 10,
 					From:      credentials.PublicKey(),
 					To: []crypto.TokenValue{
-						crypto.TokenValue{
+						{
 							Token: address,
 							Value: 1,
 						},

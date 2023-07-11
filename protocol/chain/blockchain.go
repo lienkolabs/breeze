@@ -74,12 +74,12 @@ func (c *Chain) NewBlock(epoch, checkpoint uint64, publisher crypto.Token) (*Blo
 		mutations = mutations.Append([]Mutations{parent.Validator.Mutations()})
 	}
 	return &Block{
-		Epoch:      epoch,
-		CheckPoint: checkpoint,
-		Parent:     parent.Hash,
-		Publisher:  publisher,
-		Actions:    make([][]byte, 0),
-		Validator:  c.CommitState.Validator(mutations, checkpoint),
+		Epoch:          epoch,
+		CheckPoint:     checkpoint,
+		CheckpointHash: parent.Hash,
+		Proposer:       publisher,
+		Actions:        make([][]byte, 0),
+		Validator:      c.CommitState.Validator(mutations, checkpoint),
 	}, nil
 }
 
@@ -92,7 +92,7 @@ func (c *Chain) CommitNextBlock() bool {
 		validator := c.CommitState.Validator(nil, c.LastCommitEpoch)
 		block.Revalidate(validator)
 	}
-	c.CommitState.Incorporate(block.Validator, block.Publisher)
+	c.CommitState.Incorporate(block.Validator, block.Proposer)
 	c.LastCommitEpoch = block.Epoch
 	c.LastCommitHash = block.Hash
 	return true
@@ -120,16 +120,36 @@ func (c *Chain) NextBlock(epoch, checkpoint uint64, checkpointHash crypto.Hash, 
 
 }
 
+func (c *Chain) SealOwnBlock() {
+	c.LiveBlock.Seal(c.Credentials)
+}
+
 func (c *Chain) SealBlock(publishedAt time.Time, fees uint64, hash crypto.Hash, signature crypto.Signature) error {
 	if c.LiveBlock == nil {
 		return errors.New("no live block to be sealed")
 	}
-	c.LiveBlock.PublishedAt = publishedAt
+	c.LiveBlock.ProposedAt = publishedAt
 	c.LiveBlock.Hash = hash
 	c.LiveBlock.SealSignature = signature
 	c.SealedBlocks[c.LiveBlock.Epoch] = c.LiveBlock
 	c.LiveBlock = nil
 	// todo check hash and signature?
+	return nil
+}
+
+func (c *Chain) CommitOwnBlock() error {
+	nextCommit := c.LastCommitEpoch + 1
+	block, ok := c.SealedBlocks[nextCommit]
+	if !ok {
+		return errors.New("no sealed block")
+	}
+	validator := c.CommitState.Validator(nil, c.LastCommitEpoch)
+	block.Revalidate(validator)
+	c.CommitState.Incorporate(validator, block.Proposer)
+	block.PreviousHash = c.LastCommitHash
+	c.LastCommitEpoch += 1
+	c.LastCommitHash = block.Hash
+	delete(c.SealedBlocks, nextCommit-KeepLastN)
 	return nil
 }
 
@@ -158,7 +178,7 @@ func (c *Chain) CommitBlock(epoch uint64, blockhash crypto.Hash, previousblockha
 			validator.Validate(action)
 		}
 	}
-	c.CommitState.Incorporate(validator, block.Publisher)
+	c.CommitState.Incorporate(validator, block.Proposer)
 	block.PreviousHash = previousblockhash
 	block.Invalidate = invalidated
 	c.LastCommitEpoch += 1

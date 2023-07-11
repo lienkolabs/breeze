@@ -4,31 +4,70 @@ import (
 	"time"
 
 	"github.com/lienkolabs/breeze/crypto"
+	"github.com/lienkolabs/breeze/protocol"
 	"github.com/lienkolabs/breeze/util"
 )
 
+// Block groups actions sharing a common timestamp defined by epoch.
+// Blocks are proposed against a checkpoint epoch prior to proposed epoch
+// The checkpoint is represented by a hash (parent block).
+// The proposer is the one gathering actions and grouping it.
+// Publisher is any listener of blocks that filters down actions in terms of a
+// specialized protocol.
+// Hash
 type Block struct {
-	Epoch         uint64
-	CheckPoint    uint64
-	Parent        crypto.Hash
-	Publisher     crypto.Token
-	PublishedAt   time.Time
-	Actions       [][]byte
-	Hash          crypto.Hash
-	SealSignature crypto.Signature
-	PreviousHash  crypto.Hash
-	Invalidate    []crypto.Hash
-	Validator     MutatingState
+	Protocol         protocol.Code // 0 for breeze protocol
+	Epoch            uint64
+	CheckPoint       uint64
+	CheckpointHash   crypto.Hash
+	Proposer         crypto.Token
+	Publisher        crypto.Token // Only if prototol is not breeze
+	ProposedAt       time.Time
+	Actions          [][]byte
+	Hash             crypto.Hash
+	SealSignature    crypto.Signature
+	PublishHash      crypto.Hash      // Only if protocol is not breeze
+	PublishSignature crypto.Signature // Only if protocol is not breeze
+	PreviousHash     crypto.Hash      // Hash of the recognzied prior sequence of blocks
+	Invalidate       []crypto.Hash
+	Validator        MutatingState
 }
 
 func (b *Block) NewBlock() *Block {
 	return &Block{
-		Epoch:      b.Epoch + 1,
-		CheckPoint: b.Epoch + 1,
-		Parent:     b.Hash,
-		Publisher:  b.Publisher,
-		Actions:    make([][]byte, 0),
+		Protocol:       b.Protocol,
+		Epoch:          b.Epoch + 1,
+		CheckPoint:     b.Epoch + 1,
+		CheckpointHash: b.Hash,
+		Proposer:       b.Proposer,
+		Actions:        make([][]byte, 0),
 	}
+}
+
+func (b *Block) Header() []byte {
+	bytes := make([]byte, 0)
+	util.PutUint32(uint32(b.Protocol), &bytes)
+	util.PutUint64(b.Epoch, &bytes)
+	util.PutUint64(b.CheckPoint, &bytes)
+	util.PutHash(b.CheckpointHash, &bytes)
+	util.PutToken(b.Proposer, &bytes)
+	if b.Protocol != 0 {
+		util.PutToken(b.Publisher, &bytes)
+	}
+	util.PutTime(b.ProposedAt, &bytes)
+	util.PutUint32(uint32(len(b.Actions)), &bytes)
+	return bytes
+}
+
+func (b *Block) Tail() []byte {
+	bytes := make([]byte, 0)
+	util.PutSignature(b.SealSignature, &bytes)
+	util.PutHash(b.CheckpointHash, &bytes)
+	util.PutUint32(uint32(len(b.Invalidate)), &bytes)
+	for _, hash := range b.Invalidate {
+		util.PutHash(hash, &bytes)
+	}
+	return bytes
 }
 
 func (b *Block) Validate(action []byte) bool {
@@ -41,11 +80,15 @@ func (b *Block) Validate(action []byte) bool {
 
 func (b *Block) serializeForSeal() []byte {
 	bytes := make([]byte, 0)
+	util.PutUint32(uint32(b.Protocol), &bytes)
 	util.PutUint64(b.Epoch, &bytes)
 	util.PutUint64(b.CheckPoint, &bytes)
-	util.PutHash(b.Parent, &bytes)
-	util.PutToken(b.Publisher, &bytes)
-	util.PutTime(b.PublishedAt, &bytes)
+	util.PutHash(b.CheckpointHash, &bytes)
+	util.PutToken(b.Proposer, &bytes)
+	if b.Protocol != 0 {
+		util.PutToken(b.Publisher, &bytes)
+	}
+	util.PutTime(b.ProposedAt, &bytes)
 	util.PutUint32(uint32(len(b.Actions)), &bytes)
 	for _, action := range b.Actions {
 		util.PutByteArray(action, &bytes)
@@ -54,15 +97,30 @@ func (b *Block) serializeForSeal() []byte {
 }
 
 func (b *Block) Seal(credentials crypto.PrivateKey) {
-	b.PublishedAt = time.Now()
+	b.ProposedAt = time.Now()
 	b.Hash = crypto.Hasher(b.serializeForSeal())
 	b.SealSignature = credentials.Sign(b.Hash[:])
 }
 
-func (b *Block) Serialize() []byte {
+func (b *Block) serializeForPublish() []byte {
 	bytes := b.serializeForSeal()
+	util.PutHash(b.Hash, &bytes)
 	util.PutSignature(b.SealSignature, &bytes)
-	util.PutHash(b.Parent, &bytes)
+	return bytes
+}
+
+func (b *Block) Publish(credentials crypto.PrivateKey) {
+	b.PublishHash = crypto.Hasher(b.serializeForPublish())
+	b.PublishSignature = credentials.Sign(b.PublishHash[:])
+}
+
+func (b *Block) Serialize() []byte {
+	bytes := b.serializeForPublish()
+	if b.Protocol != 0 {
+		util.PutHash(b.PublishHash, &bytes)
+		util.PutSignature(b.PublishSignature, &bytes)
+	}
+	util.PutHash(b.PreviousHash, &bytes)
 	util.PutUint32(uint32(len(b.Invalidate)), &bytes)
 	for _, hash := range b.Invalidate {
 		util.PutHash(hash, &bytes)
@@ -75,9 +133,9 @@ func ParseBlock(data []byte) *Block {
 	block := Block{}
 	block.Epoch, position = util.ParseUint64(data, position)
 	block.CheckPoint, position = util.ParseUint64(data, position)
-	block.Parent, position = util.ParseHash(data, position)
-	block.Publisher, position = util.ParseToken(data, position)
-	block.PublishedAt, position = util.ParseTime(data, position)
+	block.CheckpointHash, position = util.ParseHash(data, position)
+	block.Proposer, position = util.ParseToken(data, position)
+	block.ProposedAt, position = util.ParseTime(data, position)
 	block.Actions, position = util.ParseActionsArray(data, position)
 	hash := crypto.Hasher(data)
 	block.Hash, position = util.ParseHash(data, position)
@@ -85,7 +143,7 @@ func ParseBlock(data []byte) *Block {
 		return nil
 	}
 	block.SealSignature, position = util.ParseSignature(data, position)
-	if !block.Publisher.Verify(hash[:], block.SealSignature) {
+	if !block.Proposer.Verify(hash[:], block.SealSignature) {
 		return nil
 	}
 	block.PreviousHash, position = util.ParseHash(data, position)
