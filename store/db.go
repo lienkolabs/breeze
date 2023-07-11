@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/lienkolabs/breeze/crypto"
+	"github.com/lienkolabs/breeze/network/echo"
 	"github.com/lienkolabs/breeze/protocol/chain"
 	"github.com/lienkolabs/breeze/util"
 )
@@ -24,29 +26,67 @@ type DBMessage struct {
 }
 
 type DB struct {
+	mu               sync.Mutex
 	fileNameTemplate string
 	files            []*os.File
 	length           int
 	current          int
 	index            map[crypto.Token][]DBMessage
 	tokeninzer       Tokenizer
+	jobs             map[crypto.Token]*echo.NewIndexJob
+	runningJob       map[*echo.NewIndexJob]struct{}
 }
 
-func NewDB(broker chan []byte, fileNameTemplate string, tokenizer Tokenizer) (*DB, error) {
+func (db *DB) Close() {
+	for _, file := range db.files {
+		file.Close()
+	}
+}
+
+func NewDB(fileNameTemplate string, tokenizer Tokenizer) (*DB, error) {
 	if tokenizer == nil {
 		return nil, errors.New("a valid tokenizer function must be provided")
 	}
-	if fmt.Sprintf(fileNameTemplate, 1) == fmt.Sprintf(fileNameTemplate, 1) {
+	if fmt.Sprintf(fileNameTemplate, 1) == fmt.Sprintf(fileNameTemplate, 2) {
 		return nil, errors.New("file template must contain a %v wildcard")
 	}
 	db := &DB{
+		mu:               sync.Mutex{},
 		fileNameTemplate: fileNameTemplate,
 		files:            make([]*os.File, 0),
 		index:            make(map[crypto.Token][]DBMessage),
 		tokeninzer:       tokenizer,
+		jobs:             make(map[crypto.Token]*echo.NewIndexJob),
+		runningJob:       make(map[*echo.NewIndexJob]struct{}),
 	}
 	db.CreateNewFile()
 	return db, nil
+}
+
+func (db *DB) AppendJob(job *echo.NewIndexJob) {
+	db.mu.Lock()
+	for _, token := range job.Tokens {
+		db.jobs[token] = job
+	}
+	db.mu.Unlock()
+}
+
+func (db *DB) StartJob(job *echo.NewIndexJob, endEpoch uint64) {
+	go func() {
+		messagepool := make(map[DBMessage]struct{})
+		for _, token := range job.Tokens {
+			for _, dbMessage := range db.index[token] {
+				if dbMessage.block >= job.FromEpoch && dbMessage.block <= endEpoch {
+					messagepool[dbMessage] = struct{}{}
+				}
+			}
+		}
+		for msg := range messagepool {
+			data := db.ReadMessage(msg)
+			job.Connection.Send(data)
+		}
+		delete(db.runningJob, job)
+	}()
 }
 
 func (db *DB) AppendBlock(block *chain.Block) (*DBMessage, error) {

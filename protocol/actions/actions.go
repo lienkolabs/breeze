@@ -81,6 +81,14 @@ func ParseAction(data []byte) Action {
 	return nil
 }
 
+func GetTokens(data []byte) []crypto.Token {
+	action := ParseAction(data)
+	if action == nil {
+		return nil
+	}
+	return action.Tokens()
+}
+
 func GetEpochFromByteArray(inst []byte) uint64 {
 	epoch, _ := util.ParseUint64(inst, 2)
 	return epoch
