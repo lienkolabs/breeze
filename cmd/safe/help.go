@@ -1,24 +1,42 @@
 package main
 
 const helpdoc = `
-Auth is a tool for managing crypto keys for social protocols in the breeze ecosystem.
+safe is a tool for managing crypto keys for wallets in the breeze ecosystem. 
 
 Usage: 
 
-	auth @handle <command> [arguments]
+	safe <command> [arguments]
 
 The commands are:
 
-	enter          register @handle on the axe protocol with a new keypair
-	update         update info about the @handle
-	grant          grant power of attorney rights 
-	revoke         revoke power of attorney rights
-	show-attorneys show the list of attorneys
-	create-stage   create new stage
-	update-stage   update stage-info
-	request-stage  request participation on a stage
-	accept-request accept-request for participation on stage
-	rotate-keys    rotate crypto keys of stage
+	show-wallets    show balances of wallet registered on the secure vault 
+	sync            syncrhonizes information with the breeze network
+	create-wallet   create new wallet key pair and show token
+	config-gateway  define new gateway to breeze network
+	config-provider define new information provider from the breeze network
+	show-config     show configurations
+	transfer        send simple transfer order to breeze network
 
-Use "auth help <command>" for more information about a command. 
+Use "safe help <command>" for more information about a command. 
+`
+
+const helpconfiggateway = `
+Usage: 
+
+	safe config-gateway gateway-address
+
+`
+
+const helpconfigprovider = `
+Usage: 
+
+	safe config-provider gateway-address
+
+`
+
+const helptransfer = `
+Usage: 
+
+	safe transfer from-token quantity to-token [reason]
+
 `
