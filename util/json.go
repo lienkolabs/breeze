@@ -3,6 +3,7 @@ package util
 import (
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -88,4 +89,9 @@ func (j *JSONBuilder) PutTokenCiphers(fieldName string, tc crypto.TokenCiphers) 
 	}
 	array.Encode.WriteRune(']')
 	j.PutString(fieldName, array.Encode.String())
+}
+
+func PrintJson(v any) {
+	text, _ := json.Marshal(v)
+	fmt.Println(string(text))
 }

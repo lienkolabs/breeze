@@ -1,0 +1,7 @@
+{
+    "GatewayPort": 4000,
+    "BreezeNodeAddress": "localhost:3001",
+    "BreezeNodeToken": "b39dc818948c3e9f8ed1bc21acb72a89df9b9097090d3c6f075b2b6c0b8643a4",
+    "SecureVaultPath": "vault.dat",
+    "NodeToken": "44503016c4b155a4b7a7907f6027f30e05867de682ca1289f6dafa2b1ea3ded0"
+}

@@ -33,12 +33,14 @@ func validateCode(code ProtocolCode, data []byte) bool {
 type ReceiveTokens struct {
 	Tokens    []crypto.Token
 	FromEpoch uint64
+	KeepAlive bool
 }
 
 func (r *ReceiveTokens) Serialize() []byte {
 	data := []byte{receiveTokenMsg}
 	util.PutTokenArray(r.Tokens, &data)
 	util.PutUint64(r.FromEpoch, &data)
+	util.PutBool(r.KeepAlive, &data)
 	return data
 }
 
@@ -53,6 +55,7 @@ func ParseReceiveTokens(data []byte) *ReceiveTokens {
 	var receive ReceiveTokens
 	receive.Tokens, position = util.ParseTokenArray(data, position)
 	receive.FromEpoch, position = util.ParseUint64(data, position)
+	receive.KeepAlive, position = util.ParseBool(data, position)
 	if position != len(data) {
 		return nil
 	}

@@ -73,7 +73,7 @@ func PutUint16(v uint16, data *[]byte) {
 }
 
 func PutUint32(v uint32, data *[]byte) {
-	b := make([]byte, 8)
+	b := make([]byte, 4)
 	b[0] = byte(v)
 	b[1] = byte(v >> 8)
 	b[2] = byte(v >> 16)

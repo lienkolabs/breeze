@@ -8,6 +8,7 @@ import (
 	"github.com/lienkolabs/breeze/crypto"
 	"github.com/lienkolabs/breeze/network"
 	"github.com/lienkolabs/breeze/network/trusted"
+	"github.com/lienkolabs/breeze/util"
 )
 
 // DBPool is a primitive connection to offer the service of token indexation of
@@ -16,6 +17,7 @@ type DBPool struct {
 	mu         sync.Mutex
 	conn       map[crypto.Token]*trusted.SignedConnection   // connection token -> conn
 	indexation map[crypto.Token][]*trusted.SignedConnection // index token -> conn array
+	epoch      uint64
 }
 
 type DBPoolConfig struct {
@@ -29,6 +31,7 @@ type NewIndexJob struct {
 	Connection *trusted.SignedConnection
 	Tokens     []crypto.Token
 	FromEpoch  uint64
+	KeepAlive  bool
 }
 
 func NewDBPool(config *DBPoolConfig) (*DBPool, error) {
@@ -56,6 +59,9 @@ func NewDBPool(config *DBPoolConfig) (*DBPool, error) {
 					pool.mu.Lock()
 					pool.conn[tConn.Token] = tConn
 					pool.mu.Unlock()
+					epoch := make([]byte, 0)
+					util.PutUint64(pool.epoch, &epoch)
+					tConn.Send(epoch)
 					tConn.Listen(messages, shutdown)
 				}
 			} else {
@@ -82,6 +88,7 @@ func NewDBPool(config *DBPoolConfig) (*DBPool, error) {
 							Connection: conn,
 							Tokens:     receive.Tokens,
 							FromEpoch:  receive.FromEpoch,
+							KeepAlive:  receive.KeepAlive,
 						}
 						config.Job <- &job
 					}

@@ -145,8 +145,6 @@ func (pool *BroadcastPool) Broadcast(data []byte) {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
 	for _, listener := range pool.conn {
-		if validateCode(listener.code, data) {
-			listener.conn.Send(data)
-		}
+		listener.conn.Send(data)
 	}
 }

@@ -64,6 +64,10 @@ func (p *Payment) NewDebit(account crypto.Hash, value uint64) {
 	p.Debit = append(p.Debit, Wallet{Account: account, FungibleTokens: value})
 }
 
+func Kind(data []byte) byte {
+	return data[1]
+}
+
 func ParseAction(data []byte) Action {
 	if data[0] != 0 {
 		return nil

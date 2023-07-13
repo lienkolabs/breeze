@@ -45,7 +45,9 @@ func (vault *SecureVault) GenerateNewKey() (crypto.Token, crypto.PrivateKey) {
 	defer vault.mu.Unlock()
 	token, newKey := crypto.RandomAsymetricKey()
 	sealed := vault.cipher.Seal(newKey[:])
-	if n, err := vault.file.Write(sealed); n != len(sealed) || err != nil {
+	withLen := []byte{byte(len(sealed))}
+	withLen = append(withLen, sealed...)
+	if n, err := vault.file.Write(withLen); n != len(withLen) || err != nil {
 		// TODO: this is serious problem
 		log.Fatalf("secret vault is possibly compromissed: %v\n", err)
 	}
@@ -53,7 +55,7 @@ func (vault *SecureVault) GenerateNewKey() (crypto.Token, crypto.PrivateKey) {
 	return token, newKey
 }
 
-func NewSecureVault(password string, fileName string) *SecureVault {
+func NewSecureVault(password []byte, fileName string) *SecureVault {
 	file, err := os.Create(fileName)
 	if err != nil {
 		log.Fatalf("could not create secure vault file: %v\n", err)
@@ -61,7 +63,7 @@ func NewSecureVault(password string, fileName string) *SecureVault {
 
 	salt := make([]byte, 32)
 	rand.Read(salt)
-	cipherKey, err := scrypt.Key([]byte(password), salt, 32768, 8, 1, 32)
+	cipherKey, err := scrypt.Key(password, salt, 32768, 8, 1, 32)
 	if err != nil {
 		log.Fatalf("could not generate cipher key from password and salt: %v\n", err)
 	}
@@ -121,12 +123,12 @@ func OpenVaultFromPassword(password []byte, fileName string) *SecureVault {
 					copy(key[:], naked)
 					if first {
 						vault.SecretKey = key
-					} else {
-						vault.Secrets[key.PublicKey()] = key
+						first = false
 					}
+					vault.Secrets[key.PublicKey()] = key
 				}
 			} else {
-				log.Fatalf("could not parse key: %v\n", err)
+				log.Fatalf("could not parse key: %v, %v\n", err, size[0])
 			}
 			if err == io.EOF {
 				break

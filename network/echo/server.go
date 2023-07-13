@@ -20,3 +20,7 @@ func NewActionServer(gatewayAddress string, credentials crypto.PrivateKey, gatew
 func (a *ActionServer) Send(action []byte) {
 	a.conn.Send(action)
 }
+
+func (a *ActionServer) Shutdown() {
+	a.conn.Shutdown()
+}

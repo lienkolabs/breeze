@@ -2,5 +2,6 @@
     "gatewayPort": 3000,
     "blockBroadcastPort": 3001,
     "walletDataPath": "./",
-    "secureVaultPath": "vault.dat"
+    "secureVaultPath": "secure.dat",
+    "nodeToken": "790f18e08d15dc902a427598cd0b28dddb3c97e6837d86e71f6931c50e300ada"
 }

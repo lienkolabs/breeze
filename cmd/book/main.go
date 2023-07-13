@@ -1,31 +1,50 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/lienkolabs/breeze/crypto"
 	"github.com/lienkolabs/breeze/network"
 	"github.com/lienkolabs/breeze/network/echo"
 	"github.com/lienkolabs/breeze/protocol/actions"
 	"github.com/lienkolabs/breeze/store"
+	"github.com/lienkolabs/breeze/util"
 )
 
 type Config struct {
-	Credentials         crypto.PrivateKey
 	ServePort           int
 	BlockServiceAddress string
-	BlockServiveToken   *crypto.Token
+	BlockServiveToken   string
 	FileNameTemplate    string
+	NodeToken           string
+	SecureVaultPath     string
 }
 
 func main() {
-	jobs := make(chan *echo.NewIndexJob)
 	var config Config
+	if len(os.Args) < 2 {
+		log.Fatalln("usage: breeze path-to-config-file.json")
+	}
+	util.ReadConfigFile(os.Args[1], &config)
+
+	if config.SecureVaultPath == "" {
+		log.Fatalf("no path to secure vault specified in the configuration file\n")
+	}
+	credentials, isNew := util.GetOrSetCredentialsFromVault(config.SecureVaultPath)
+	if isNew != "" {
+		fmt.Println(isNew)
+		return
+	}
+	token := crypto.TokenFromString(config.NodeToken)
+	if !token.Equal(credentials.PublicKey()) {
+		log.Fatalf("credentials on security vault does not match config node token\n")
+	}
+
+	jobs := make(chan *echo.NewIndexJob)
 	configDB := echo.DBPoolConfig{
-		Credentials: config.Credentials,
+		Credentials: credentials,
 		Validator:   network.AcceptAllConnections,
 		ServePort:   config.ServePort,
 		Job:         jobs,
@@ -37,17 +56,14 @@ func main() {
 	}
 
 	configBlock := echo.BlockListenerConfig{
-		Credentials:         config.Credentials,
+		Credentials:         credentials,
 		BlockServiceAddress: config.BlockServiceAddress,
-		BlockServiveToken:   *config.BlockServiveToken,
+		BlockServiveToken:   crypto.TokenFromString(config.BlockServiveToken),
 	}
 
 	listener, err := echo.NewBlockListener(&configBlock)
 	if err != nil {
 		log.Fatalf("could not connect to block privider: %v\n", err)
-	}
-	if server != nil && listener != nil {
-		return
 	}
 
 	db, err := store.NewDB(config.FileNameTemplate, actions.GetTokens)
@@ -64,8 +80,9 @@ func main() {
 			select {
 			case block := <-listener.Block:
 				db.AppendBlock(block)
-			case <-jobs:
-
+				fmt.Println(block.Epoch, len(block.Actions))
+			case job := <-jobs:
+				db.AppendJob(job)
 			case confirm := <-shutdown:
 				server.Shutdown()
 				listener.Shutdown()
@@ -76,10 +93,7 @@ func main() {
 		}
 	}()
 
-	c := make(chan os.Signal, 1) // we need to reserve to buffer size 1, so the notifier are not blocked
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	<-c
-	confirm := make(chan struct{})
-	shutdown <- confirm
-	<-confirm
+	done := util.ShutdownEvents()
+	<-done
+
 }

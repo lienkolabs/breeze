@@ -78,6 +78,7 @@ func NewActionsGateway(port int, credentials crypto.PrivateKey, validate network
 				if err != nil {
 					conn.Close()
 				} else {
+					fmt.Println("connected")
 					gateway.inbound[trustedConn.Token] = &connectionWithStats{
 						conn:  trustedConn,
 						start: time.Now(),
@@ -98,6 +99,7 @@ func NewActionsGateway(port int, credentials crypto.PrivateKey, validate network
 				delete(gateway.inbound, token)
 				gateway.mu.Unlock()
 			case msg := <-messages:
+				fmt.Println("received")
 				gateway.Actions <- msg.Data
 			}
 		}

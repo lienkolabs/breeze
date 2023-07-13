@@ -26,6 +26,7 @@ type DBMessage struct {
 }
 
 type DB struct {
+	epoch            uint64
 	mu               sync.Mutex
 	fileNameTemplate string
 	files            []*os.File
@@ -64,11 +65,14 @@ func NewDB(fileNameTemplate string, tokenizer Tokenizer) (*DB, error) {
 }
 
 func (db *DB) AppendJob(job *echo.NewIndexJob) {
-	db.mu.Lock()
-	for _, token := range job.Tokens {
-		db.jobs[token] = job
+	if job.KeepAlive {
+		db.mu.Lock()
+		for _, token := range job.Tokens {
+			db.jobs[token] = job
+		}
+		db.mu.Unlock()
 	}
-	db.mu.Unlock()
+	db.StartJob(job, db.epoch)
 }
 
 func (db *DB) StartJob(job *echo.NewIndexJob, endEpoch uint64) {
@@ -86,6 +90,11 @@ func (db *DB) StartJob(job *echo.NewIndexJob, endEpoch uint64) {
 			job.Connection.Send(data)
 		}
 		delete(db.runningJob, job)
+		if !job.KeepAlive {
+			bytes := make([]byte, 8)
+			util.PutUint64(endEpoch, &bytes)
+			job.Connection.Send(bytes)
+		}
 	}()
 }
 
@@ -112,6 +121,7 @@ func (db *DB) IncorporateBlock(block *chain.Block) error {
 	if err != nil {
 		return err
 	}
+	db.epoch = block.Epoch
 	head := block.Header()
 	position := blockMessage.position + len(head) + 4
 	for _, action := range block.Actions {

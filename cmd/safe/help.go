@@ -1,42 +1,95 @@
 package main
 
-const helpdoc = `
-safe is a tool for managing crypto keys for wallets in the breeze ecosystem. 
+import "github.com/lienkolabs/breeze/util"
 
-Usage: 
+var help = util.Help{
+	Executable: "safe",
+	Short:      "is a tool for managing crypto keys for wallets in the breeze ecosystem.",
+	Flags:      map[string]string{"vault": "path"},
+	Commands: map[string]util.CommandHelp{
+		"show-wallets": {
+			Usage:       "safe show-wallets",
+			Short:       "show balances of wallet registered on the secure vault",
+			Description: "",
+			Execute:     showWallets,
+		},
 
-	safe <command> [arguments]
+		"sync": {
+			Usage:       "safe sync",
+			Short:       "syncrhonizes information with the breeze network",
+			Description: "",
+			Execute:     sync,
+		},
 
-The commands are:
+		"create-wallet": {
+			Usage:       "safe create-wallets",
+			Short:       "create new wallet key pair and show token",
+			Description: "",
+			Execute:     createWallet,
+		},
 
-	show-wallets    show balances of wallet registered on the secure vault 
-	sync            syncrhonizes information with the breeze network
-	create-wallet   create new wallet key pair and show token
-	config-gateway  define new gateway to breeze network
-	config-provider define new information provider from the breeze network
-	show-config     show configurations
-	transfer        send simple transfer order to breeze network
+		"config-gateway": {
+			Usage:       "safe config-gateway gateway-address gateway-token",
+			Short:       "define new gateway to breeze network",
+			Description: "",
+			Execute:     configureGateway,
+		},
 
-Use "safe help <command>" for more information about a command. 
-`
+		"config-provider": {
+			Usage:       "safe config-provider provider-address provider-token",
+			Short:       "safe config-provider provider-address",
+			Description: "",
+			Execute:     configureProvider,
+		},
 
-const helpconfiggateway = `
-Usage: 
+		"show-config": {
+			Usage:       "safe show-config",
+			Short:       "show configurations",
+			Description: "",
+			Execute:     showConfig,
+		},
 
-	safe config-gateway gateway-address
+		"transfer": {
+			Usage:       "safe transfer from-token quantity to-token [reason]",
+			Short:       "send simple transfer order to breeze network",
+			Description: "",
+			Execute:     transfer,
+		},
 
-`
+		"deposit": {
+			Usage:       "safe deposit from-token quantity",
+			Short:       "deposit tokens for PoS collateral",
+			Description: helpDeposit,
+			Execute:     deposit,
+		},
 
-const helpconfigprovider = `
-Usage: 
+		"withdraw": {
+			Usage:       "safe withdraw deposit-token quantity",
+			Short:       "withdraw deposited tokens",
+			Description: "",
+			Execute:     withdraw,
+		},
 
-	safe config-provider gateway-address
+		"create-vault": {
+			Usage:       "safe [--vault=<path>] create-vault filename",
+			Short:       "create a new vault file with a private key",
+			Description: "",
+			Execute:     createVault,
+		},
 
-`
+		"show-token": {
+			Usage:       "safe [--vault=<path>] show-token filename",
+			Short:       "create a new vault file with a private key",
+			Description: "",
+			Execute:     showToken,
+		},
+	},
+}
 
-const helptransfer = `
-Usage: 
+const helpDeposit = `Deposited tokens will remain frozen and cannot be used for transfers until 
+withdrawn.
 
-	safe transfer from-token quantity to-token [reason]
-
-`
+In order to candidate for participation within validator network the holder of
+secrets associated with the token must run a validating node with annoucing the
+deposited token and must provide a valid checksum for the state of the network
+according to breeze protocol.`

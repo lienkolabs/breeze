@@ -1,9 +1,12 @@
 package state
 
 import (
+	"fmt"
+
 	"github.com/lienkolabs/breeze/crypto"
 	"github.com/lienkolabs/breeze/protocol/actions"
 	"github.com/lienkolabs/breeze/protocol/chain"
+	"github.com/lienkolabs/breeze/util"
 )
 
 type MutatingState struct {
@@ -21,8 +24,10 @@ func (c *MutatingState) Validate(data []byte) bool {
 	if action == nil {
 		return false
 	}
+	util.PrintJson(action)
 	payments := action.Payments()
 	if !c.CanPay(payments) {
+		fmt.Println("cant pay")
 		return false
 	}
 	c.TransferPayments(payments)

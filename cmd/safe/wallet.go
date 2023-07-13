@@ -1,13 +1,11 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
-	"strconv"
 
 	"github.com/lienkolabs/breeze/crypto"
 	"github.com/lienkolabs/breeze/network/echo"
@@ -23,6 +21,7 @@ type Wallet struct {
 }
 
 func (w *Wallet) Sync(epoch uint64, tokens ...crypto.Token) {
+	w.config = GetConfig()
 	client := echo.DBClientConfig{
 		ProviderAddress: w.config.Provider,
 		ProviderToken:   crypto.TokenFromString(w.config.ProviderToken),
@@ -74,6 +73,7 @@ func (w *Wallet) Send(action actions.Action) {
 	if err != nil {
 		log.Fatalf("could not connect to gatewat: %v\n", err)
 	}
+	util.PrintJson(action)
 	server.Send(action.Serialize())
 	server.Shutdown()
 }
@@ -114,6 +114,15 @@ func (w *Wallet) ResetEpoch(epoch uint64) {
 	}
 }
 
+func (w *Wallet) ReadEpoch() uint64 {
+	bytes := make([]byte, 8)
+	if n, err := w.data.ReadAt(bytes, 0); n != 8 || err != nil {
+		log.Fatalf("could not write on data file: %v", err)
+	}
+	epoch, _ := util.ParseUint64(bytes, 0)
+	return epoch
+}
+
 func (w *Wallet) Append(action []byte) {
 	bytes := make([]byte, 0)
 	util.PutUint16(uint16(len(action)), &bytes)
@@ -123,74 +132,59 @@ func (w *Wallet) Append(action []byte) {
 	}
 }
 
-func Help() {
-	fmt.Print(helpdoc)
+func createVault(h util.Help) {
+	filePath, ok := flags["vault"]
+	if !ok {
+		fmt.Println("specify vault filename to be created.")
+		h.Doc()
+	}
+	if util.FileExists(filePath) {
+		fmt.Println("file already exists")
+		os.Exit(0)
+	}
+	vault := util.OpenVault(filePath)
+	fmt.Printf("vault %v create with the new token %v\n", filePath, vault.SecretKey.PublicKey())
+	os.Exit(0)
 }
 
-type Config struct {
-	Gateway       string
-	GatewayToken  string
-	Provider      string
-	ProviderToken string
-}
-
-func GetNewConfig() Config {
-	fmt.Println("No condiguration found.")
-	fmt.Println("Breeze Gateway:")
-	var gateway string
-	fmt.Scanln(&gateway)
-	fmt.Println("Breeze Data Provider:")
-	var provider string
-	fmt.Scanln(&provider)
-	return Config{
-		Gateway:  gateway,
-		Provider: provider,
+func showToken(h util.Help) {
+	var path string
+	if filePath, ok := flags["vault"]; ok {
+		path = filePath
+	} else {
+		path = util.DefaultHomeDir()
+		path = filepath.Join(path, ".wallets", "secure.dat")
 	}
-}
-
-func SaveConfig(config Config) {
-	path := util.DefaultHomeDir()
-	path = filepath.Join(path, ".wallets")
-	util.CreateFolderIfNotExists(path)
-	path = filepath.Join(path, "config.json")
-	bytes, err := json.Marshal(config)
-	if err != nil {
-		log.Fatalf("could not marshall config json: %v", err)
+	if !util.FileExists(path) {
+		fmt.Println("vault file not found")
+		os.Exit(0)
 	}
-	file, err := os.Create(path)
-	if err != nil {
-		log.Fatalf("could not create/truncate config file: %v", err)
+	vault := util.OpenVault(path)
+	if vault == nil {
+		fmt.Println("could not open vault")
+		os.Exit(0)
 	}
-	if _, err := file.Write(bytes); err != nil {
-		log.Fatalf("could not write on config file: %v", err)
-	}
-}
-
-func GetConfig() Config {
-	path := util.DefaultHomeDir()
-	path = filepath.Join(path, ".wallets", "config.json")
-	exists := util.FileExists(path)
-	if !exists {
-		config := GetNewConfig()
-		SaveConfig(config)
-		return config
-	}
-	bytes, err := os.ReadFile(path)
-	if err != nil {
-		log.Fatalf("could not read configuration file: %v", err)
-	}
-	var config Config
-	json.Unmarshal(bytes, &config)
-	return config
+	fmt.Printf("vault %v token:\n%v\n", path, vault.SecretKey.PublicKey())
+	os.Exit(0)
 }
 
 func OpenWallet() *Wallet {
-	path := util.DefaultHomeDir()
-	path = filepath.Join(path, ".wallets")
-	util.CreateFolderIfNotExists(path)
-	vault := util.OpenVault(filepath.Join(path, "secure.dat"))
+	var vault *vault.SecureVault
+	if filePath, ok := flags["vault"]; ok {
+		if !util.FileExists(filePath) {
+			fmt.Printf("file not found: %v\n", filePath)
+			os.Exit(0)
+		}
+		vault = util.OpenVault(filePath)
+	} else {
+		path := util.DefaultHomeDir()
+		path = filepath.Join(path, ".wallets")
+		util.CreateFolderIfNotExists(path)
+		vault = util.OpenVault(filepath.Join(path, "secure.dat"))
+
+	}
 	if vault == nil {
-		log.Fatal("could not crete cault")
+		log.Fatal("could not create vault")
 	}
 	file, exists := util.CreateFileIfNotExists(".wallets", "actions.dat")
 	if !exists {
@@ -200,108 +194,35 @@ func OpenWallet() *Wallet {
 		}
 	}
 	return &Wallet{
-		vault: vault,
-		data:  file,
+		vault:  vault,
+		data:   file,
+		config: GetConfig(),
 	}
 }
 
-func main() {
-	if len(os.Args) == 1 {
-		Help()
-		return
-	}
-	config := GetConfig()
-	if os.Args[1] == "show-config" {
-		fmt.Printf("\nConfiguration:\nBreeze gateway address: %v\nBreeze data provider address: %v\n\n", config.Gateway, config.Provider)
-		return
-	}
-	if os.Args[1] == "config-gateway" {
-		if len(os.Args) < 3 {
-			fmt.Print(helpconfiggateway)
-			return
-		}
-		config.Gateway = os.Args[2]
-		SaveConfig(config)
-		fmt.Printf("\nConfiguration:\nBreeze gateway address: %v\nBreeze data provider address: %v\n\n", config.Gateway, config.Provider)
-		return
-	}
-	if os.Args[1] == "config-provider" {
-		if len(os.Args) < 3 {
-			fmt.Print(helpconfigprovider)
-			return
-		}
-		config.Provider = os.Args[2]
-		SaveConfig(config)
-		fmt.Printf("\nConfiguration:\nBreeze gateway address: %v\nBreeze data provider address: %v\n\n", config.Gateway, config.Provider)
-		return
-	}
+func createWallet(help util.Help) {
 	wallet := OpenWallet()
-	if wallet == nil {
-		log.Fatal("could not open/create wallet")
-	}
-	if os.Args[1] == "create-wallet" {
-		token, _ := wallet.vault.GenerateNewKey()
-		fmt.Printf("\nNew Token: %v\n\n", token)
-		return
-	}
-	if os.Args[1] == "show-wallets" {
-		fmt.Println("Token                                                               Balance")
-		fmt.Println("--------------------------------------------------------------------------------")
-		balances := wallet.GetBalances()
-		for token, _ := range wallet.vault.Secrets {
-			balance := balances[crypto.HashToken(token)]
-			fmt.Printf("%v   %v\n", token, balance)
-		}
+	token, _ := wallet.vault.GenerateNewKey()
+	fmt.Printf("\nNew Token: %v\n\n", token)
+}
 
-		return
+func showWallets(help util.Help) {
+	wallet := OpenWallet()
+	fmt.Println("Token                                                               Balance")
+	fmt.Println("--------------------------------------------------------------------------------")
+	balances := wallet.GetBalances()
+	for token, _ := range wallet.vault.Secrets {
+		balance := balances[crypto.HashToken(token)]
+		fmt.Printf("%v   %v\n", token, balance)
 	}
-	if os.Args[1] == "transfer" {
-		if len(os.Args) < 5 {
-			fmt.Print(helptransfer)
-			return
-		}
-		from := crypto.TokenFromString(os.Args[2])
-		if from.Equal(crypto.ZeroToken) {
-			fmt.Println("invalid from-token")
-			fmt.Print(helptransfer)
-			return
-		}
-		credentails, ok := wallet.vault.Secrets[from]
-		if !ok {
-			fmt.Println("dont know secret for from-token")
-			fmt.Print(helptransfer)
-			return
-		}
-		qty, _ := strconv.Atoi(os.Args[3])
-		if qty <= 0 {
-			fmt.Println("invalid quantity")
-			fmt.Print(helptransfer)
-			return
-		}
-		to := crypto.TokenFromString(os.Args[4])
-		if to.Equal(crypto.ZeroToken) {
-			fmt.Println("invalid to-token")
-			fmt.Print(helptransfer)
-			return
-		}
-		transfer := actions.Transfer{
-			TimeStamp: wallet.GetEpochFromProvider(),
-			From:      from,
-			To: []crypto.TokenValue{
-				{Token: to, Value: uint64(qty)},
-			},
-		}
-		if len(os.Args) >= 6 {
-			fee, _ := strconv.Atoi(os.Args[5])
-			if fee <= 0 {
-				fmt.Println("invalid fee")
-				fmt.Print(helptransfer)
-				return
-			}
-			transfer.Fee = uint64(fee)
-		}
-		transfer.Sign(credentails)
+}
 
+func sync(help util.Help) {
+	wallet := OpenWallet()
+	epoch := wallet.ReadEpoch()
+	tokens := make([]crypto.Token, 0)
+	for token, _ := range wallet.vault.Secrets {
+		tokens = append(tokens, token)
 	}
-
+	wallet.Sync(epoch, tokens...)
 }

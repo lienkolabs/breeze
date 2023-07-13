@@ -2,7 +2,6 @@
 package poa
 
 import (
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -47,12 +46,15 @@ func NewProofOfAuthorityValidator(credentials crypto.PrivateKey, gatewayPort, br
 				hash := block.Hash
 				epoch += 1
 				validator = blockstate.Validator(state.NewMutations(), epoch)
-				text, _ := json.Marshal(block)
-				fmt.Println(string(text))
+				//text, _ := json.Marshal(block)
+				//fmt.Println(string(text))
+				fmt.Println(block.Epoch, len(block.Actions))
 				block = block.NewBlock()
 				pool.BrodcastNextBlock(epoch, epoch-1, hash, block.Proposer)
 			case action := <-gateway.Actions:
+				fmt.Println(action)
 				if validator.Validate(action) {
+					fmt.Println("incorporated")
 					block.Actions = append(block.Actions, action)
 					pool.BroadcastAction(action)
 				}
