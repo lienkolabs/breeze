@@ -37,7 +37,7 @@ func NewQueue() *Queue {
 		set:      make(chan []byte),
 		shutdown: make(chan struct{}),
 	}
-
+	live := true
 	go func() {
 		for {
 			select {
@@ -45,9 +45,13 @@ func NewQueue() *Queue {
 				if len(queue.pool) > 0 {
 					resp <- queue.pool[0]
 					queue.pool = queue.pool[1:]
+				} else if !live {
+					resp <- []byte{}
+					return
 				} else if queue.waiting == nil {
 					queue.waiting = resp
 				} else {
+					// TODO: when you get here?
 					close(resp)
 				}
 			case item := <-queue.set:
@@ -58,7 +62,11 @@ func NewQueue() *Queue {
 					queue.pool = append(queue.pool, item)
 				}
 			case <-queue.shutdown:
-				return
+				if queue.waiting != nil {
+					queue.waiting <- []byte{}
+					return
+				}
+				live = false
 			}
 		}
 	}()
@@ -113,13 +121,15 @@ func NewDBClient(config DBClientConfig) (*DBClient, error) {
 	go func() {
 		for {
 			bytes, err := conn.Read()
+			fmt.Println(bytes)
 			if err != nil {
 				client.Live = false
 				return
 			}
-			if len(bytes) == 8 && !config.KeepAlive {
+			if len(bytes) == 8 { // && !config.KeepAlive {
 				client.Finish, _ = util.ParseUint64(bytes, 0)
 				client.Live = false
+				client.Shutdown()
 				conn.Shutdown()
 				return
 			}

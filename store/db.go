@@ -91,7 +91,7 @@ func (db *DB) StartJob(job *echo.NewIndexJob, endEpoch uint64) {
 		}
 		delete(db.runningJob, job)
 		if !job.KeepAlive {
-			bytes := make([]byte, 8)
+			bytes := make([]byte, 0)
 			util.PutUint64(endEpoch, &bytes)
 			job.Connection.Send(bytes)
 		}
