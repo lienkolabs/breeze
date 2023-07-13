@@ -22,6 +22,49 @@ type Wallet struct {
 	config Config
 }
 
+func (w *Wallet) Sync(epoch uint64, tokens ...crypto.Token) {
+	client := echo.DBClientConfig{
+		ProviderAddress: w.config.Provider,
+		ProviderToken:   crypto.TokenFromString(w.config.ProviderToken),
+		Credentials:     w.vault.SecretKey,
+		KeepAlive:       false,
+	}
+	provider, err := echo.NewDBClient(client)
+	if err != nil {
+		log.Fatalf("could not connect to provider: %v", err)
+	}
+	provider.Subscribe(epoch, false, tokens...)
+	receiveAction := make(chan []byte)
+	for {
+		provider.Receive(receiveAction)
+		action := <-receiveAction
+		if len(action) == 0 {
+			break
+		}
+		bytes := make([]byte, 0)
+		util.PutUint16(uint16(len(bytes)), &bytes)
+		bytes = append(bytes, action...)
+		if n, err := w.data.Write(bytes); n != len(bytes) {
+			log.Fatalf("could not write on data file: %v", err)
+		}
+	}
+}
+
+func (w *Wallet) GetEpochFromProvider() uint64 {
+	client := echo.DBClientConfig{
+		ProviderAddress: w.config.Provider,
+		ProviderToken:   crypto.TokenFromString(w.config.ProviderToken),
+		Credentials:     w.vault.SecretKey,
+		KeepAlive:       false,
+	}
+	provider, err := echo.NewDBClient(client)
+	if err != nil {
+		log.Fatalf("could not connect to provider to get current epoch: %v", err)
+	}
+	provider.Shutdown()
+	return provider.Epoch
+}
+
 func (w *Wallet) Send(action actions.Action) {
 	token := crypto.TokenFromString(w.config.GatewayToken)
 	if token.Equal(crypto.ZeroToken) {
@@ -223,6 +266,12 @@ func main() {
 			fmt.Print(helptransfer)
 			return
 		}
+		credentails, ok := wallet.vault.Secrets[from]
+		if !ok {
+			fmt.Println("dont know secret for from-token")
+			fmt.Print(helptransfer)
+			return
+		}
 		qty, _ := strconv.Atoi(os.Args[3])
 		if qty <= 0 {
 			fmt.Println("invalid quantity")
@@ -236,11 +285,22 @@ func main() {
 			return
 		}
 		transfer := actions.Transfer{
-			From: from,
+			TimeStamp: wallet.GetEpochFromProvider(),
+			From:      from,
 			To: []crypto.TokenValue{
 				{Token: to, Value: uint64(qty)},
 			},
 		}
+		if len(os.Args) >= 6 {
+			fee, _ := strconv.Atoi(os.Args[5])
+			if fee <= 0 {
+				fmt.Println("invalid fee")
+				fmt.Print(helptransfer)
+				return
+			}
+			transfer.Fee = uint64(fee)
+		}
+		transfer.Sign(credentails)
 
 	}
 
