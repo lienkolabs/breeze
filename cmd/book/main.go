@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
 
@@ -34,7 +33,6 @@ func main() {
 	}
 	credentials, isNew := util.GetOrSetCredentialsFromVault(config.SecureVaultPath)
 	if isNew != "" {
-		fmt.Println(isNew)
 		return
 	}
 	token := crypto.TokenFromString(config.NodeToken)
@@ -80,7 +78,6 @@ func main() {
 			select {
 			case block := <-listener.Block:
 				db.AppendBlock(block)
-				fmt.Println(block.Epoch, len(block.Actions))
 			case job := <-jobs:
 				db.AppendJob(job)
 			case confirm := <-shutdown:
