@@ -83,6 +83,13 @@ var help = util.Help{
 			Description: "",
 			Execute:     showToken,
 		},
+
+		"actions": {
+			Usage:       "safe actions",
+			Short:       "show all actions associated to tokens",
+			Description: "",
+			Execute:     history,
+		},
 	},
 }
 

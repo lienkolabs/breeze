@@ -6,15 +6,21 @@ import (
 )
 
 type Mutations struct {
+	Epoch         uint64
 	DeltaWallets  map[crypto.Hash]int
 	DeltaDeposits map[crypto.Hash]int
 }
 
-func NewMutations() *Mutations {
+func NewMutations(epoch uint64) *Mutations {
 	return &Mutations{
+		Epoch:         epoch,
 		DeltaWallets:  make(map[crypto.Hash]int),
 		DeltaDeposits: make(map[crypto.Hash]int),
 	}
+}
+
+func (m *Mutations) GetEpoch() uint64 {
+	return m.Epoch
 }
 
 func (m *Mutations) DeltaBalance(hash crypto.Hash) int {
@@ -23,11 +29,14 @@ func (m *Mutations) DeltaBalance(hash crypto.Hash) int {
 }
 
 func (m *Mutations) Append(array []chain.Mutations) chain.Mutations {
-	grouped := NewMutations()
+	grouped := NewMutations(m.Epoch)
 	all := []*Mutations{m}
 	if len(array) > 0 {
 		for _, a := range array {
 			if mutation, ok := a.(*Mutations); ok {
+				if mutation.Epoch >= grouped.Epoch {
+					grouped.Epoch = mutation.Epoch
+				}
 				all = append(all, mutation)
 			}
 		}

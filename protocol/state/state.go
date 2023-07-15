@@ -14,13 +14,17 @@ type State struct {
 }
 
 func (s *State) NewMutations() chain.Mutations {
-	return NewMutations()
+	return NewMutations(s.Epoch + 1)
 }
 
-func (s *State) Validator(chain.Mutations, uint64) chain.MutatingState {
+func (s *State) Validator(mutations chain.Mutations, epoch uint64) chain.MutatingState {
+	m, ok := mutations.(*Mutations)
+	if !ok {
+		return nil
+	}
 	return &MutatingState{
 		State:     s,
-		mutations: NewMutations(),
+		mutations: m,
 	}
 }
 

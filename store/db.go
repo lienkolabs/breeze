@@ -76,11 +76,13 @@ func (db *DB) AppendJob(job *echo.NewIndexJob) {
 }
 
 func (db *DB) StartJob(job *echo.NewIndexJob, endEpoch uint64) {
+	fmt.Println("end epoch", endEpoch)
 	go func() {
 		messagepool := make(map[DBMessage]struct{})
 		for _, token := range job.Tokens {
 			for _, dbMessage := range db.index[token] {
 				if dbMessage.block >= job.FromEpoch && dbMessage.block <= endEpoch {
+					fmt.Println("found")
 					messagepool[dbMessage] = struct{}{}
 				}
 			}
@@ -126,7 +128,7 @@ func (db *DB) IncorporateBlock(block *chain.Block) error {
 	position := blockMessage.position + len(head) + 4
 	for _, action := range block.Actions {
 		dbMessage := DBMessage{
-			file:     db.current,
+			file:     db.current - 1,
 			block:    block.Epoch,
 			position: position + 2, // 2 for the size of the action
 			size:     len(action),

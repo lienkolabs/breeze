@@ -9,10 +9,17 @@ import (
 	"github.com/lienkolabs/breeze/util"
 )
 
+const MaxEpochDifference = 100
+
 type MutatingState struct {
+	Epoch         uint64
 	State         *State
 	mutations     *Mutations
 	FeesCollected uint64
+}
+
+func (m *MutatingState) GetEpoch() uint64 {
+	return m.Epoch
 }
 
 func (m *MutatingState) Mutations() chain.Mutations {
@@ -22,6 +29,10 @@ func (m *MutatingState) Mutations() chain.Mutations {
 func (c *MutatingState) Validate(data []byte) bool {
 	action := actions.ParseAction(data)
 	if action == nil {
+		return false
+	}
+	epoch := action.Epoch()
+	if (c.Epoch-epoch) > MaxEpochDifference || epoch > c.Epoch {
 		return false
 	}
 	util.PrintJson(action)

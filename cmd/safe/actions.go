@@ -125,3 +125,11 @@ func transfer(help util.Help) {
 	transfer.Sign(credentails)
 	wallet.Send(&transfer)
 }
+
+func history(h util.Help) {
+	wallet := OpenWallet()
+	actions := wallet.GetActions()
+	for _, action := range actions {
+		util.PrintJson(action)
+	}
+}

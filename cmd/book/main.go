@@ -77,7 +77,7 @@ func main() {
 		for {
 			select {
 			case block := <-listener.Block:
-				db.AppendBlock(block)
+				db.IncorporateBlock(block)
 			case job := <-jobs:
 				db.AppendJob(job)
 			case confirm := <-shutdown:

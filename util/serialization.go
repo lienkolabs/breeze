@@ -275,7 +275,7 @@ func ParseTime(data []byte, position int) (time.Time, int) {
 	bytes, newposition := ParseByteArray(data, position)
 	var t time.Time
 	if err := t.UnmarshalBinary(bytes); err != nil {
-		panic("cannot parse time")
+		return time.Time{}, newposition
 	}
 	return t, newposition
 

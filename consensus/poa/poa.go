@@ -34,7 +34,7 @@ func NewProofOfAuthorityValidator(credentials crypto.PrivateKey, gatewayPort, br
 		Proposer:       credentials.PublicKey(),
 		Actions:        make([][]byte, 0),
 	}
-	validator := blockstate.Validator(state.NewMutations(), 1)
+	validator := blockstate.Validator(state.NewMutations(1), 1)
 	go func() {
 		for {
 			select {
@@ -42,12 +42,11 @@ func NewProofOfAuthorityValidator(credentials crypto.PrivateKey, gatewayPort, br
 				block.Seal(credentials)
 				pool.BrodcastSealBlock(block.ProposedAt, block.Hash, block.SealSignature)
 				pool.BrodcastCommitBlock(epoch, block.Hash)
+				pool.Append(block)
 				blockstate.Incorporate(validator, block.Proposer)
 				hash := block.Hash
 				epoch += 1
-				validator = blockstate.Validator(state.NewMutations(), epoch)
-				//text, _ := json.Marshal(block)
-				//fmt.Println(string(text))
+				validator = blockstate.Validator(state.NewMutations(epoch), epoch)
 				fmt.Println(block.Epoch, len(block.Actions))
 				block = block.NewBlock()
 				pool.BrodcastNextBlock(epoch, epoch-1, hash, block.Proposer)

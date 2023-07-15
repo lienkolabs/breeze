@@ -32,10 +32,12 @@ const KeepLastN = 100
 type MutatingState interface {
 	Validate(msg []byte) bool
 	Mutations() Mutations
+	GetEpoch() uint64
 }
 
 type Mutations interface {
 	Append([]Mutations) Mutations
+	GetEpoch() uint64
 }
 
 type State interface {

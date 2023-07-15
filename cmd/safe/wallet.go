@@ -40,6 +40,9 @@ func (w *Wallet) Sync(epoch uint64, tokens ...crypto.Token) {
 		if len(action) == 0 {
 			break
 		}
+		if parser := actions.ParseAction(action); parser != nil {
+			util.PrintJson(parser)
+		}
 		bytes := make([]byte, 0)
 		util.PutUint16(uint16(len(bytes)), &bytes)
 		bytes = append(bytes, action...)
@@ -76,6 +79,26 @@ func (w *Wallet) Send(action actions.Action) {
 	util.PrintJson(action)
 	server.Send(action.Serialize())
 	server.Shutdown()
+}
+
+func (w *Wallet) GetActions() []actions.Action {
+	all := make([]actions.Action, 0)
+	position := int64(8)
+	size := make([]byte, 1)
+	for {
+		if nbytes, _ := w.data.ReadAt(size, position); nbytes != 1 {
+			return all
+		}
+		position += 1
+		data := make([]byte, int(size[0]))
+		nbytes, err := w.data.ReadAt(size, position)
+		if nbytes != len(data) || err == io.EOF {
+			return all
+		}
+		position += int64(nbytes)
+		action := actions.ParseAction(data)
+		all = append(all, action)
+	}
 }
 
 func (w *Wallet) GetBalances() map[crypto.Hash]uint64 {

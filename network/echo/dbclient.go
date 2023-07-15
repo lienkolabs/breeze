@@ -119,9 +119,10 @@ func NewDBClient(config DBClientConfig) (*DBClient, error) {
 	}
 
 	go func() {
+		count := 0
 		for {
+			count += 1
 			bytes, err := conn.Read()
-			fmt.Println(bytes)
 			if err != nil {
 				client.Live = false
 				return

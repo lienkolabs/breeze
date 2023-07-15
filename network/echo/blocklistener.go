@@ -1,8 +1,6 @@
 package echo
 
 import (
-	"fmt"
-
 	"github.com/lienkolabs/breeze/crypto"
 	"github.com/lienkolabs/breeze/network/trusted"
 	"github.com/lienkolabs/breeze/protocol/chain"
@@ -40,8 +38,11 @@ func NewBlockListener(config *BlockListenerConfig) (*BlockListener, error) {
 	live := true
 
 	go func() {
-		subscribeMsg := []byte{subscribeMsg, 255, 255, 255, 255}
-		conn.Send(subscribeMsg)
+		msg := SubscribeProtocol{
+			Code:      ProtocolCode{255, 255, 255, 255},
+			FromEpoch: 0,
+		}
+		conn.Send(msg.Serialize())
 		for {
 			msg, err := conn.Read()
 			if err != nil {
@@ -79,6 +80,13 @@ func (l *BlockListener) Shutdown() {
 
 func (l *BlockListener) NewMessage(msg []byte) {
 	switch msg[0] {
+	case blockcacheMsg:
+		if len(msg) > 1 {
+			block := chain.ParseBlock(msg[1:])
+			if block != nil {
+				l.Block <- block
+			}
+		}
 	case actionMsg:
 		if l.newBlock != nil {
 			l.newBlock.Actions = append(l.newBlock.Actions, msg[1:])
@@ -92,10 +100,7 @@ func (l *BlockListener) NewMessage(msg []byte) {
 				Proposer:       nextBlock.Publisher,
 				Actions:        make([][]byte, 0),
 			}
-		} else {
-			fmt.Println("could not parse nextblock")
 		}
-
 	case sealBLockMsg:
 		if seal := ParseBlockTail(msg); seal != nil {
 			if l.newBlock != nil {
@@ -105,24 +110,16 @@ func (l *BlockListener) NewMessage(msg []byte) {
 				l.sealed[l.newBlock.Epoch] = l.newBlock
 				l.newBlock = nil
 			}
-		} else {
-			fmt.Println("could not parse seal")
 		}
 	case commitBlockMsg:
-		fmt.Println("**")
 		if commit := ParseCommitBlock(msg); commit != nil {
 			if sealed, ok := l.sealed[commit.Epoch]; ok && sealed.Hash.Equal(commit.Hash) {
 				sealed.PreviousHash = commit.ParentHash
 				sealed.Invalidate = commit.Invalidate
 				l.Block <- sealed
 				delete(l.sealed, commit.Epoch)
-			} else {
-				fmt.Println("could not find sealed block")
 			}
-		} else {
-			fmt.Println("could not parse commit")
 		}
-
 	case rolloverBlockMsg:
 		if rollover := ParseRolloverBlock(msg); rollover != nil {
 			for epoch := range l.sealed {
@@ -130,8 +127,6 @@ func (l *BlockListener) NewMessage(msg []byte) {
 					delete(l.sealed, epoch)
 				}
 			}
-		} else {
-			fmt.Println("could not parse rollover")
 		}
 	}
 }

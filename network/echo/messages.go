@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/lienkolabs/breeze/crypto"
+	"github.com/lienkolabs/breeze/protocol/chain"
 	"github.com/lienkolabs/breeze/util"
 )
 
@@ -15,6 +16,7 @@ const (
 	rolloverBlockMsg
 	subscribeMsg
 	receiveTokenMsg
+	blockcacheMsg
 )
 
 const protocolPos = 9
@@ -28,6 +30,84 @@ func validateCode(code ProtocolCode, data []byte) bool {
 		}
 	}
 	return true
+}
+
+type BlockCache []byte
+
+func NewBlockCache(block *chain.Block) BlockCache {
+	return append([]byte{blockcacheMsg}, block.Serialize()...)
+}
+
+func NewFilteredBlockCache(block *chain.Block, code ProtocolCode) BlockCache {
+	filtered := chain.Block{
+		Protocol:         block.Protocol,
+		Epoch:            block.Epoch,
+		CheckPoint:       block.CheckPoint,
+		CheckpointHash:   block.CheckpointHash,
+		Proposer:         block.Proposer,
+		Publisher:        block.Publisher,
+		ProposedAt:       block.ProposedAt,
+		Actions:          make([][]byte, 0),
+		Hash:             block.Hash,
+		SealSignature:    block.SealSignature,
+		PublishHash:      block.PublishHash,
+		PublishSignature: block.PublishSignature,
+		PreviousHash:     block.PreviousHash,
+		Invalidate:       make([]crypto.Hash, 0),
+	}
+	hashes := make(map[crypto.Hash]struct{})
+	for _, hash := range block.Invalidate {
+		hashes[hash] = struct{}{}
+	}
+	for _, action := range block.Actions {
+		if validateCode(code, action) {
+			filtered.Actions = append(filtered.Actions, action)
+			hash := crypto.Hasher(action)
+			if _, ok := hashes[hash]; ok {
+				filtered.Invalidate = append(filtered.Invalidate, hash)
+			}
+		}
+	}
+	return NewBlockCache(&filtered)
+}
+
+func ParseBlockCache(data []byte) BlockCache {
+	if len(data) < 1 || data[0] != blockcacheMsg {
+		return nil
+	}
+	return data[1:]
+}
+
+type SubscribeProtocol struct {
+	Code      ProtocolCode
+	FromEpoch uint64
+}
+
+func (s *SubscribeProtocol) Serialize() []byte {
+	data := []byte{subscribeMsg}
+	data = append(data, s.Code[:]...)
+	util.PutUint64(s.FromEpoch, &data)
+	return data
+}
+
+func ParseSubscribeProtocol(data []byte) *SubscribeProtocol {
+	if len(data) < 5 {
+		return nil
+	}
+	if data[0] != subscribeMsg {
+		return nil
+	}
+	var receive SubscribeProtocol
+	receive.Code[0] = data[1]
+	receive.Code[1] = data[2]
+	receive.Code[2] = data[3]
+	receive.Code[3] = data[4]
+	position := 5
+	receive.FromEpoch, position = util.ParseUint64(data, position)
+	if position != len(data) {
+		return nil
+	}
+	return &receive
 }
 
 type ReceiveTokens struct {

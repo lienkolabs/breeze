@@ -89,16 +89,14 @@ func (b *Block) serializeForSeal() []byte {
 		util.PutToken(b.Publisher, &bytes)
 	}
 	util.PutTime(b.ProposedAt, &bytes)
-	util.PutUint32(uint32(len(b.Actions)), &bytes)
-	for _, action := range b.Actions {
-		util.PutByteArray(action, &bytes)
-	}
+	util.PutActionsArray(b.Actions, &bytes)
 	return bytes
 }
 
 func (b *Block) Seal(credentials crypto.PrivateKey) {
 	b.ProposedAt = time.Now()
-	b.Hash = crypto.Hasher(b.serializeForSeal())
+	data := b.serializeForSeal()
+	b.Hash = crypto.Hasher(data)
 	b.SealSignature = credentials.Sign(b.Hash[:])
 }
 
@@ -121,30 +119,43 @@ func (b *Block) Serialize() []byte {
 		util.PutSignature(b.PublishSignature, &bytes)
 	}
 	util.PutHash(b.PreviousHash, &bytes)
-	util.PutUint32(uint32(len(b.Invalidate)), &bytes)
-	for _, hash := range b.Invalidate {
-		util.PutHash(hash, &bytes)
-	}
+	util.PutHashArray(b.Invalidate, &bytes)
 	return bytes
 }
 
 func ParseBlock(data []byte) *Block {
+	if data[0] != 0 {
+		return nil
+	}
 	position := 0
 	block := Block{}
+	var protocolNum uint32
+	protocolNum, position = util.ParseUint32(data, position)
+	block.Protocol = protocol.Code(protocolNum)
 	block.Epoch, position = util.ParseUint64(data, position)
 	block.CheckPoint, position = util.ParseUint64(data, position)
 	block.CheckpointHash, position = util.ParseHash(data, position)
 	block.Proposer, position = util.ParseToken(data, position)
+	if block.Protocol != 0 {
+		block.Publisher, position = util.ParseToken(data, position)
+	}
 	block.ProposedAt, position = util.ParseTime(data, position)
 	block.Actions, position = util.ParseActionsArray(data, position)
-	hash := crypto.Hasher(data)
+	hash := crypto.Hasher(data[0:position])
 	block.Hash, position = util.ParseHash(data, position)
-	if !hash.Equal(block.Hash) {
+	if block.Protocol == 0 && !hash.Equal(block.Hash) {
 		return nil
 	}
 	block.SealSignature, position = util.ParseSignature(data, position)
 	if !block.Proposer.Verify(hash[:], block.SealSignature) {
 		return nil
+	}
+	if block.Protocol != 0 {
+		block.PublishHash, position = util.ParseHash(data, position)
+		block.PublishSignature, position = util.ParseSignature(data, position)
+		if block.Publisher.Verify(block.PublishHash[:], block.PublishSignature) {
+			return nil
+		}
 	}
 	block.PreviousHash, position = util.ParseHash(data, position)
 	block.Invalidate, _ = util.ParseHashArray(data, position)
