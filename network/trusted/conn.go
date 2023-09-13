@@ -16,6 +16,14 @@ type Message struct {
 	Data  []byte
 }
 
+func DialTCP(laddr, raddr *net.TCPAddr, credentials crypto.PrivateKey, token crypto.Token) (*SignedConnection, error) {
+	conn, err := net.DialTCP("tcp", laddr, raddr)
+	if err != nil {
+		return nil, err
+	}
+	return performClientHandShake(conn, credentials, token)
+}
+
 func Dial(address string, credentials crypto.PrivateKey, token crypto.Token) (*SignedConnection, error) {
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
