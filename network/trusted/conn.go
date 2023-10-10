@@ -4,6 +4,7 @@ package trusted
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net"
 
 	"github.com/lienkolabs/breeze/crypto"
@@ -41,6 +42,9 @@ type SignedConnection struct {
 }
 
 func (s *SignedConnection) Send(msg []byte) error {
+	if len(msg) == 0 {
+		return nil
+	}
 	lengthWithSignature := len(msg) + crypto.SignatureSize
 	if lengthWithSignature > 1<<32-1 {
 		return ErrMessageTooLarge
@@ -64,6 +68,10 @@ func (s *SignedConnection) readWithoutCheck() ([]byte, error) {
 		return nil, err
 	}
 	lenght := int(lengthBytes[0]) + (int(lengthBytes[1]) << 8) + (int(lengthBytes[2]) << 16) + (int(lengthBytes[3]) << 24)
+	if lenght == 0 {
+		log.Printf("Warning: received empty message")
+		return nil, nil
+	}
 	msg := make([]byte, lenght)
 	if n, err := s.conn.Read(msg); n != int(lenght) {
 		return nil, err
