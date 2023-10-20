@@ -6,10 +6,10 @@ import (
 )
 
 const (
-	ITransfer byte = iota
+	IVoid byte = iota
+	ITransfer
 	IDeposit
 	IWithdraw
-	IVoid
 	IUnkown
 )
 

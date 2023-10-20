@@ -7,6 +7,7 @@ import (
 
 type Void struct {
 	TimeStamp uint64
+	Protocol  uint32
 	Data      []byte
 	Wallet    crypto.Token
 	Fee       uint64
@@ -22,8 +23,9 @@ func (v *Void) FeePaid() uint64 {
 }
 
 func (t *Void) serializeSign() []byte {
-	bytes := []byte{0, ITransfer}
+	bytes := []byte{0, IVoid}
 	util.PutUint64(t.TimeStamp, &bytes)
+	util.PutUint32(t.Protocol, &bytes)
 	util.PutByteArray(t.Data, &bytes)
 	util.PutToken(t.Wallet, &bytes)
 	util.PutUint64(t.Fee, &bytes)
@@ -69,6 +71,7 @@ func ParseVoid(data []byte) *Void {
 	p := Void{}
 	position := 2
 	p.TimeStamp, position = util.ParseUint64(data, position)
+	p.Protocol, position = util.ParseUint32(data, position)
 	p.Data, position = util.ParseByteArray(data, position)
 	p.Wallet, position = util.ParseToken(data, position)
 	p.Fee, position = util.ParseUint64(data, position)
